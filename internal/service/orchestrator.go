@@ -1,0 +1,172 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/stefenello/agent-orchestrator/internal/domain"
+	"github.com/stefenello/agent-orchestrator/internal/store"
+)
+
+var (
+	// ErrInvalidInput indicates the caller supplied an incomplete request.
+	ErrInvalidInput = errors.New("invalid input")
+	// ErrNotFound indicates the requested entity does not exist.
+	ErrNotFound = errors.New("not found")
+	// ErrAuthorizationRequired is returned when a transition to implementation
+	// is attempted without a recorded IMPLEMENTATION=AUTHORIZED condition.
+	ErrAuthorizationRequired = errors.New("implementation not authorized")
+	// ErrInvalidTransition is returned for illegal state transitions.
+	ErrInvalidTransition = errors.New("invalid phase transition")
+	// ErrProjectBusy is returned when the project concurrency limit is reached.
+	ErrProjectBusy = errors.New("project already has an active work item")
+)
+
+// CreateWorkItemInput is the caller-supplied description of new work.
+type CreateWorkItemInput struct {
+	Project     string
+	Title       string
+	Description string
+	Priority    domain.Priority
+	BaseBranch  string
+	RepoPath    string
+	Assignee    string
+	Metadata    domain.Metadata
+}
+
+// Orchestrator holds the WorkItem state machine and coordinates the store,
+// worktree manager, and OpenCode adapter.
+type Orchestrator struct {
+	store     store.Store
+	worktrees WorktreeManager
+	adapter   domain.OpenCodeAdapter
+	now       func() time.Time
+}
+
+// New builds an Orchestrator. adapter may be nil; phases that require OpenCode
+// will then fail loudly rather than silently no-op.
+func New(s store.Store, wm WorktreeManager, adapter domain.OpenCodeAdapter) *Orchestrator {
+	return &Orchestrator{
+		store:     s,
+		worktrees: wm,
+		adapter:   adapter,
+		now:       func() time.Time { return time.Now().UTC() },
+	}
+}
+
+// CreateWorkItem creates a WorkItem, provisions exactly one worktree, and
+// starts the Discovery phase. It emits workitem.created and phase.started.
+func (o *Orchestrator) CreateWorkItem(ctx context.Context, in CreateWorkItemInput) (*domain.WorkItem, error) {
+	if in.Project == "" || in.Title == "" {
+		return nil, fmt.Errorf("%w: project and title are required", ErrInvalidInput)
+	}
+	if in.BaseBranch == "" {
+		in.BaseBranch = "main"
+	}
+	if in.Priority == "" {
+		in.Priority = domain.PriorityMedium
+	}
+	if in.Metadata == nil {
+		in.Metadata = domain.Metadata{}
+	}
+
+	now := o.now()
+	wi := &domain.WorkItem{
+		ID:           domain.NewWorkItemID(),
+		Project:      in.Project,
+		Title:        in.Title,
+		Description:  in.Description,
+		Priority:     in.Priority,
+		Status:       domain.PhaseDiscovery,
+		CurrentPhase: domain.PhaseDiscovery,
+		BaseBranch:   in.BaseBranch,
+		Assignee:     in.Assignee,
+		Metadata:     in.Metadata,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+
+	wt, err := o.worktrees.Create(ctx, string(wi.ID), in.RepoPath, in.BaseBranch)
+	if err != nil {
+		return nil, fmt.Errorf("provision worktree: %w", err)
+	}
+	wi.WorktreePath = wt.Path
+
+	if err := o.store.CreateWorkItem(ctx, wi); err != nil {
+		return nil, err
+	}
+	if err := o.appendEvent(ctx, wi.ID, domain.EventWorkItemCreated, domain.ActorHuman, map[string]any{
+		"project": wi.Project,
+		"title":   wi.Title,
+	}); err != nil {
+		return nil, err
+	}
+	if err := o.appendEvent(ctx, wi.ID, domain.EventWorktreeCreated, domain.ActorSystem, map[string]any{
+		"path": wi.WorktreePath,
+	}); err != nil {
+		return nil, err
+	}
+	if err := o.appendEvent(ctx, wi.ID, domain.EventPhaseStarted, domain.ActorSystem, map[string]any{
+		"phase": string(domain.PhaseDiscovery),
+	}); err != nil {
+		return nil, err
+	}
+	return wi, nil
+}
+
+// GetWorkItem returns a WorkItem or ErrNotFound.
+func (o *Orchestrator) GetWorkItem(ctx context.Context, id domain.WorkItemID) (*domain.WorkItem, error) {
+	wi, err := o.store.GetWorkItem(ctx, id)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return wi, nil
+}
+
+// ListWorkItems returns WorkItems, optionally filtered by project.
+func (o *Orchestrator) ListWorkItems(ctx context.Context, project string) ([]*domain.WorkItem, error) {
+	return o.store.ListWorkItems(ctx, project)
+}
+
+// ListEvents returns the ordered audit trail for a WorkItem.
+func (o *Orchestrator) ListEvents(ctx context.Context, id domain.WorkItemID) ([]*domain.Event, error) {
+	if _, err := o.GetWorkItem(ctx, id); err != nil {
+		return nil, err
+	}
+	return o.store.ListEvents(ctx, id)
+}
+
+func (o *Orchestrator) appendEvent(ctx context.Context, id domain.WorkItemID, t domain.EventType, actor domain.EventActor, payload map[string]any) error {
+	return o.store.AppendEvent(ctx, &domain.Event{
+		ID:         domain.NewEventID(),
+		WorkItemID: id,
+		Type:       t,
+		Payload:    payload,
+		Actor:      actor,
+		At:         o.now(),
+	})
+}
+
+// updatePhase persists a WorkItem phase change and emits phase events.
+func (o *Orchestrator) updatePhase(ctx context.Context, wi *domain.WorkItem, next domain.Phase) error {
+	prev := wi.CurrentPhase
+	wi.CurrentPhase = next
+	wi.Status = next
+	wi.UpdatedAt = o.now()
+	if err := o.store.UpdateWorkItem(ctx, wi); err != nil {
+		return err
+	}
+	if err := o.appendEvent(ctx, wi.ID, domain.EventPhaseCompleted, domain.ActorSystem, map[string]any{
+		"phase": string(prev),
+	}); err != nil {
+		return err
+	}
+	return o.appendEvent(ctx, wi.ID, domain.EventPhaseStarted, domain.ActorSystem, map[string]any{
+		"phase": string(next),
+	})
+}

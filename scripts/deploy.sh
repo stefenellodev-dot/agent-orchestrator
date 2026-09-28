@@ -22,6 +22,14 @@
 
 set -euo pipefail
 
+# Re-exec from a stable copy: the script checks out a different revision of the
+# repository mid-run, which would otherwise mutate the file being executed.
+if [[ "${ORCH_DEPLOY_REEXEC:-0}" != "1" ]]; then
+  TMP="$(mktemp "${TMPDIR:-/tmp}/orch-deploy.XXXXXX.sh")"
+  cp "$0" "$TMP"
+  ORCH_DEPLOY_REEXEC=1 exec bash "$TMP" "$@"
+fi
+
 SHA_ARG="${1:-}"
 if [[ -z "$SHA_ARG" ]]; then
   echo "usage: $0 <git-sha>" >&2

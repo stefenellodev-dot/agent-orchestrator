@@ -66,6 +66,25 @@ What it does (fails fast on any error):
 It never `git pull`s a moving branch and never copies files from a developer
 machine.
 
+### Builder toolchain
+
+Piave has no system Go and the Docker Hub Go images pull prohibitively slowly
+on its network, so the deploy uses a **user-provisioned Go toolchain** at
+`~/go-toolchain/go/bin/go` (the Go 1.27.1 linux/amd64 toolchain module fetched
+from `proxy.golang.org`). Override with `ORCH_GO_BIN=/path/to/go`. If no local
+Go is found, the script falls back to a container builder (`ORCH_GO_IMAGE`).
+
+Bootstrap (one time, on Piave):
+
+```bash
+mkdir -p ~/go-toolchain && cd ~/go-toolchain
+curl -sSL -o go.zip "https://proxy.golang.org/golang.org/toolchain/@v/v0.0.1-go1.27.1.linux-amd64.zip"
+python3 -c 'import zipfile;zipfile.ZipFile("go.zip").extractall(".")'
+mv golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64 go
+rm -rf go.zip golang.org
+~/go-toolchain/go/bin/go version
+```
+
 ## Validate
 
 ```bash

@@ -62,19 +62,35 @@ VERSION="$(git -C "$SRC" describe --tags --always || echo "$SHA")"
 BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "version: $VERSION  commit: $SHA  build_time: $BUILD_TIME"
 
-say "build binary in Go container ($GO_IMAGE)"
+say "build binary"
 mkdir -p "$SRC/bin"
-podman run --rm --userns=keep-id \
-  -v "$SRC:/src:Z" -w /src \
-  -v orchestrator-gomod:/go/pkg/mod \
-  -v orchestrator-gocache:/home/builder/.cache/go-build \
-  -e HOME=/home/builder -e GOTOOLCHAIN=local \
-  "$GO_IMAGE" \
-  go build -trimpath \
-  -ldflags "-s -w -X ${PKG}.Version=${VERSION} -X ${PKG}.Commit=${SHA} -X ${PKG}.BuildTime=${BUILD_TIME}" \
-  -o bin/orchestrator ./cmd/orchestrator
+# Prefer a locally provisioned Go toolchain; fall back to a container builder.
+GO_BIN="${ORCH_GO_BIN:-}"
+if [[ -z "$GO_BIN" ]]; then
+  if [[ -x "$HOME/go-toolchain/go/bin/go" ]]; then
+    GO_BIN="$HOME/go-toolchain/go/bin/go"
+  elif command -v go >/dev/null 2>&1; then
+    GO_BIN="$(command -v go)"
+  fi
+fi
+
+LDFLAGS="-s -w -X ${PKG}.Version=${VERSION} -X ${PKG}.Commit=${SHA} -X ${PKG}.BuildTime=${BUILD_TIME}"
+if [[ -n "$GO_BIN" ]]; then
+  echo "using Go toolchain: $GO_BIN ($("$GO_BIN" version))"
+  ( cd "$SRC" && GOTOOLCHAIN=local "$GO_BIN" build -trimpath -ldflags "$LDFLAGS" -o bin/orchestrator ./cmd/orchestrator )
+else
+  echo "no local Go; using container builder $GO_IMAGE"
+  podman run --rm --userns=keep-id \
+    -v "$SRC:/src:Z" -w /src \
+    -v orchestrator-gomod:/go/pkg/mod \
+    -v orchestrator-gocache:/home/builder/.cache/go-build \
+    -e HOME=/home/builder -e GOTOOLCHAIN=local \
+    "$GO_IMAGE" \
+    go build -trimpath -ldflags "$LDFLAGS" -o bin/orchestrator ./cmd/orchestrator
+fi
 
 test -x "$SRC/bin/orchestrator" || { echo "binary not produced" >&2; exit 1; }
+"$SRC/bin/orchestrator" version
 
 say "build runtime image ($IMAGE)"
 podman build -t "$IMAGE" -f "$SRC/configs/quadlet/Containerfile" "$SRC"

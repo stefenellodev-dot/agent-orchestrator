@@ -81,12 +81,12 @@ type FeatureConfig struct {
 }
 
 type ProjectConfig struct {
-	Name              string   `mapstructure:"name"`
-	RepoPath          string   `mapstructure:"repo_path"`
-	BaseBranch        string   `mapstructure:"base_branch"`
-	ValidationCmds    []string `mapstructure:"validation_commands"`
-	LintCmds          []string `mapstructure:"lint_commands"`
-	TypecheckCmds     []string `mapstructure:"typecheck_commands"`
+	Name           string   `mapstructure:"name"`
+	RepoPath       string   `mapstructure:"repo_path"`
+	BaseBranch     string   `mapstructure:"base_branch"`
+	ValidationCmds []string `mapstructure:"validation_commands"`
+	LintCmds       []string `mapstructure:"lint_commands"`
+	TypecheckCmds  []string `mapstructure:"typecheck_commands"`
 }
 
 func Load(path string) (*Config, error) {

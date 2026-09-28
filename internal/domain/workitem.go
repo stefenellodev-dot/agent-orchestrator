@@ -151,10 +151,10 @@ const (
 // AuthorizationRecord captures the IMPLEMENTATION=AUTHORIZED condition.
 // Authorization is a recorded condition, not a phase.
 type AuthorizationRecord struct {
-	Granted   bool      `json:"granted"`
-	GrantedBy string    `json:"granted_by"`
-	GrantedAt time.Time `json:"granted_at"`
-	ApprovedCommitSHA string `json:"approved_commit_sha,omitempty"`
+	Granted           bool      `json:"granted"`
+	GrantedBy         string    `json:"granted_by"`
+	GrantedAt         time.Time `json:"granted_at"`
+	ApprovedCommitSHA string    `json:"approved_commit_sha,omitempty"`
 }
 
 type Approval struct {

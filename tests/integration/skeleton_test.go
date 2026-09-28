@@ -12,13 +12,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/stefenello/agent-orchestrator/internal/api"
 	"github.com/stefenello/agent-orchestrator/internal/domain"
 	"github.com/stefenello/agent-orchestrator/internal/service"
+	"github.com/stefenello/agent-orchestrator/internal/store"
 	"github.com/stefenello/agent-orchestrator/internal/store/memory"
+	"github.com/stefenello/agent-orchestrator/internal/store/postgres"
 )
 
 func runGit(t *testing.T, dir string, args ...string) {
@@ -58,60 +61,80 @@ exit 0
 }
 
 func TestSkeleton_WorkItemReachesComplete(t *testing.T) {
-	ctx := context.Background()
-	repo := initRepo(t)
-	root := t.TempDir()
-	withFakeOpenCode(t)
+	runSkeleton(t, "memory", memory.New())
+}
 
-	orch := service.New(memory.New(), service.NewGitWorktreeManager(root), service.NewCLIAdapter("opencode"))
-	orch.SetAutoDrive(true)
-	orch.SetAutoApprove(true)
-
-	srv := httptest.NewServer(api.NewServer(orch, api.Options{}))
-	defer srv.Close()
-
-	body := `{"project":"skeleton","title":"Do the thing","description":"desc","repo_path":"` + repo + `"}`
-	resp, err := http.Post(srv.URL+"/api/workitems", "application/json", strings.NewReader(body))
+func TestSkeleton_WorkItemReachesComplete_Postgres(t *testing.T) {
+	dsn := os.Getenv("ORCHESTRATOR_TEST_DSN")
+	if dsn == "" {
+		t.Skip("ORCHESTRATOR_TEST_DSN not set; skipping PostgreSQL skeleton")
+	}
+	pool, err := pgxpool.New(context.Background(), dsn)
 	require.NoError(t, err)
-	defer resp.Body.Close()
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	t.Cleanup(pool.Close)
 
-	var created domain.WorkItem
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
-	require.NotEmpty(t, created.WorktreePath)
+	_, err = pool.Exec(context.Background(), `DROP TABLE IF EXISTS approvals, gates, events, sessions, work_items, schema_migrations CASCADE;`)
+	require.NoError(t, err)
+	require.NoError(t, postgres.Migrate(context.Background(), pool))
 
-	// Wait for the workflow to reach a terminal phase.
-	final := pollUntil(t, srv.URL+"/api/workitems/"+string(created.ID), 10*time.Second, func(wi domain.WorkItem) bool {
-		return wi.CurrentPhase.IsTerminal()
-	})
-	assert.Equal(t, domain.PhaseComplete, final.CurrentPhase)
+	runSkeleton(t, "postgres", postgres.NewStore(pool))
+}
 
-	// Assert the full phase sequence was visited.
-	events := fetchEvents(t, srv.URL+"/api/workitems/"+string(created.ID)+"/events")
-	var started []string
-	for _, e := range events {
-		if e.Type == domain.EventPhaseStarted {
-			if p, ok := e.Payload["phase"].(string); ok {
-				started = append(started, p)
+func runSkeleton(t *testing.T, name string, st store.Store) {
+	t.Helper()
+	t.Run(name, func(t *testing.T) {
+		ctx := context.Background()
+		repo := initRepo(t)
+		root := t.TempDir()
+		withFakeOpenCode(t)
+
+		orch := service.New(st, service.NewGitWorktreeManager(root), service.NewCLIAdapter("opencode"))
+		orch.SetAutoDrive(true)
+		orch.SetAutoApprove(true)
+
+		srv := httptest.NewServer(api.NewServer(orch, api.Options{}))
+		defer srv.Close()
+
+		body := `{"project":"skeleton-` + name + `","title":"Do the thing","description":"desc","repo_path":"` + repo + `"}`
+		resp, err := http.Post(srv.URL+"/api/workitems", "application/json", strings.NewReader(body))
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		var created domain.WorkItem
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+		require.NotEmpty(t, created.WorktreePath)
+
+		final := pollUntil(t, srv.URL+"/api/workitems/"+string(created.ID), 10*time.Second, func(wi domain.WorkItem) bool {
+			return wi.CurrentPhase.IsTerminal()
+		})
+		assert.Equal(t, domain.PhaseComplete, final.CurrentPhase)
+
+		events := fetchEvents(t, srv.URL+"/api/workitems/"+string(created.ID)+"/events")
+		var started []string
+		for _, e := range events {
+			if e.Type == domain.EventPhaseStarted {
+				if p, ok := e.Payload["phase"].(string); ok {
+					started = append(started, p)
+				}
 			}
 		}
-	}
-	assert.Equal(t, []string{
-		string(domain.PhaseDiscovery),
-		string(domain.PhaseDecision),
-		string(domain.PhaseAwaitingApproval),
-		string(domain.PhaseImplementation),
-		string(domain.PhaseValidation),
-		string(domain.PhaseComplete),
-	}, started)
+		assert.Equal(t, []string{
+			string(domain.PhaseDiscovery),
+			string(domain.PhaseDecision),
+			string(domain.PhaseAwaitingApproval),
+			string(domain.PhaseImplementation),
+			string(domain.PhaseValidation),
+			string(domain.PhaseComplete),
+		}, started)
 
-	// Completion cleans up the worktree.
-	require.Eventually(t, func() bool {
-		_, err := os.Stat(created.WorktreePath)
-		return os.IsNotExist(err)
-	}, 5*time.Second, 50*time.Millisecond, "worktree should be cleaned after complete")
+		require.Eventually(t, func() bool {
+			_, err := os.Stat(created.WorktreePath)
+			return os.IsNotExist(err)
+		}, 5*time.Second, 50*time.Millisecond, "worktree should be cleaned after complete")
 
-	_ = ctx
+		_ = ctx
+	})
 }
 
 func pollUntil(t *testing.T, url string, timeout time.Duration, done func(domain.WorkItem) bool) domain.WorkItem {

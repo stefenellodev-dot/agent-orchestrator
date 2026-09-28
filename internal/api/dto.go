@@ -6,14 +6,14 @@ import (
 )
 
 type createWorkItemRequest struct {
-	Project     string            `json:"project"`
-	Title       string            `json:"title"`
-	Description string            `json:"description"`
-	Priority    string            `json:"priority"`
-	BaseBranch  string            `json:"base_branch"`
-	RepoPath    string            `json:"repo_path"`
-	Assignee    string            `json:"assignee"`
-	Metadata    map[string]any    `json:"metadata"`
+	Project     string         `json:"project"`
+	Title       string         `json:"title"`
+	Description string         `json:"description"`
+	Priority    string         `json:"priority"`
+	BaseBranch  string         `json:"base_branch"`
+	RepoPath    string         `json:"repo_path"`
+	Assignee    string         `json:"assignee"`
+	Metadata    map[string]any `json:"metadata"`
 }
 
 func (r createWorkItemRequest) toInput() service.CreateWorkItemInput {

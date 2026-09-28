@@ -16,6 +16,7 @@ import (
 	"github.com/stefenello/agent-orchestrator/internal/api"
 	"github.com/stefenello/agent-orchestrator/internal/config"
 	"github.com/stefenello/agent-orchestrator/internal/service"
+	"github.com/stefenello/agent-orchestrator/internal/store"
 	"github.com/stefenello/agent-orchestrator/internal/store/memory"
 	"github.com/stefenello/agent-orchestrator/internal/store/postgres"
 )
@@ -61,10 +62,6 @@ func serveCmd() *cobra.Command {
 }
 
 func runServe(cfg *config.Config) error {
-	if cfg.Store.Kind != "memory" {
-		return fmt.Errorf("store kind %q not yet supported (only \"memory\")", cfg.Store.Kind)
-	}
-
 	adapter := service.NewCLIAdapter(cfg.OpenCode.BinaryPath)
 	if caps, err := adapter.ValidateCLI(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: opencode CLI probe failed: %v\n", err)
@@ -72,9 +69,14 @@ func runServe(cfg *config.Config) error {
 		fmt.Fprintf(os.Stderr, "opencode %s detected (agents: %v)\n", caps.Version, caps.SupportedAgents)
 	}
 
-	store := memory.New()
+	st, cleanup, err := buildStore(context.Background(), cfg)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
 	worktrees := service.NewGitWorktreeManager(cfg.Worktree.RootPath)
-	orch := service.New(store, worktrees, adapter)
+	orch := service.New(st, worktrees, adapter)
 	orch.SetAutoDrive(true)
 	orch.SetAutoApprove(cfg.Feature.AutoApproveForTests)
 	orch.SetPhaseTimeout(cfg.OpenCode.DefaultTimeout)
@@ -127,6 +129,30 @@ func webCmd() *cobra.Command {
 		Use:   "web",
 		Short: "Start web dashboard server",
 		RunE:  func(cmd *cobra.Command, args []string) error { return errors.New("not implemented") },
+	}
+}
+
+// buildStore selects the persistence backend from config. The returned cleanup
+// must be called on shutdown.
+func buildStore(ctx context.Context, cfg *config.Config) (store.Store, func(), error) {
+	switch cfg.Store.Kind {
+	case "", "memory":
+		return memory.New(), func() {}, nil
+	case "postgres":
+		if cfg.Database.DSN == "" {
+			return nil, nil, errors.New("database.dsn is required for postgres store")
+		}
+		pool, err := pgxpool.New(ctx, cfg.Database.DSN)
+		if err != nil {
+			return nil, nil, fmt.Errorf("connect database: %w", err)
+		}
+		if err := postgres.Migrate(ctx, pool); err != nil {
+			pool.Close()
+			return nil, nil, fmt.Errorf("migrate: %w", err)
+		}
+		return postgres.NewStore(pool), pool.Close, nil
+	default:
+		return nil, nil, fmt.Errorf("unknown store kind %q", cfg.Store.Kind)
 	}
 }
 

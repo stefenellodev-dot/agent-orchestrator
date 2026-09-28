@@ -29,12 +29,12 @@ type TypecheckResult struct {
 
 // CommandResult is the raw, reproducible outcome of a single command.
 type CommandResult struct {
-	Command    string   `json:"command"`
-	ExitCode   int      `json:"exit_code"`
-	Stdout     string   `json:"stdout,omitempty"`
-	Stderr     string   `json:"stderr,omitempty"`
-	DurationMS int64    `json:"duration_ms"`
-	Passed     bool     `json:"passed"`
+	Command    string `json:"command"`
+	ExitCode   int    `json:"exit_code"`
+	Stdout     string `json:"stdout,omitempty"`
+	Stderr     string `json:"stderr,omitempty"`
+	DurationMS int64  `json:"duration_ms"`
+	Passed     bool   `json:"passed"`
 }
 
 type Artifact struct {

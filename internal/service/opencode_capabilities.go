@@ -11,14 +11,14 @@ import (
 // absent, and it never panics on unexpected input.
 func ParseCapabilities(version, runHelp, agentsOutput string) domain.CLICapabilities {
 	caps := domain.CLICapabilities{
-		Version:         strings.TrimSpace(version),
-		SupportsJSON:    hasFlag(runHelp, "--format") && strings.Contains(runHelp, "json"),
-		SupportsSession: hasFlag(runHelp, "--session"),
+		Version:          strings.TrimSpace(version),
+		SupportsJSON:     hasFlag(runHelp, "--format") && strings.Contains(runHelp, "json"),
+		SupportsSession:  hasFlag(runHelp, "--session"),
 		SupportsContinue: hasFlag(runHelp, "--continue"),
-		SupportsFork:    hasFlag(runHelp, "--fork"),
-		SupportsAgent:   hasFlag(runHelp, "--agent"),
-		SupportsDir:     hasFlag(runHelp, "--dir"),
-		SupportsAttach:  hasFlag(runHelp, "--attach"),
+		SupportsFork:     hasFlag(runHelp, "--fork"),
+		SupportsAgent:    hasFlag(runHelp, "--agent"),
+		SupportsDir:      hasFlag(runHelp, "--dir"),
+		SupportsAttach:   hasFlag(runHelp, "--attach"),
 	}
 	caps.SupportedAgents = parseAgents(agentsOutput)
 	return caps

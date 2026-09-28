@@ -43,6 +43,15 @@ type Orchestrator struct {
 	worktrees WorktreeManager
 	adapter   domain.OpenCodeAdapter
 	now       func() time.Time
+
+	// autoDrive starts workflow execution in the background when a WorkItem is
+	// created. Off by default so unit tests can drive explicitly.
+	autoDrive bool
+	// autoApprove bypasses the human gate. Test-only; MUST stay false in
+	// production, where the gate pauses the workflow.
+	autoApprove  bool
+	agents       map[domain.Phase]string
+	phaseTimeout time.Duration
 }
 
 // New builds an Orchestrator. adapter may be nil; phases that require OpenCode
@@ -53,8 +62,46 @@ func New(s store.Store, wm WorktreeManager, adapter domain.OpenCodeAdapter) *Orc
 		worktrees: wm,
 		adapter:   adapter,
 		now:       func() time.Time { return time.Now().UTC() },
+		agents: map[domain.Phase]string{
+			domain.PhaseDiscovery:      "explore",
+			domain.PhaseDecision:       "plan",
+			domain.PhaseImplementation: "build",
+			domain.PhaseValidation:     "build",
+		},
+		phaseTimeout: 10 * time.Minute,
 	}
 }
+
+// SetAutoDrive enables background workflow execution on WorkItem creation.
+func (o *Orchestrator) SetAutoDrive(v bool) { o.autoDrive = v }
+
+// SetAutoApprove bypasses the human gate. Test-only.
+func (o *Orchestrator) SetAutoApprove(v bool) { o.autoApprove = v }
+
+// SetAgents overrides the per-phase OpenCode agent names.
+func (o *Orchestrator) SetAgents(discovery, decision, implementation, validation string) {
+	if discovery != "" {
+		o.agents[domain.PhaseDiscovery] = discovery
+	}
+	if decision != "" {
+		o.agents[domain.PhaseDecision] = decision
+	}
+	if implementation != "" {
+		o.agents[domain.PhaseImplementation] = implementation
+	}
+	if validation != "" {
+		o.agents[domain.PhaseValidation] = validation
+	}
+}
+
+// SetPhaseTimeout overrides the per-phase execution timeout.
+func (o *Orchestrator) SetPhaseTimeout(d time.Duration) {
+	if d > 0 {
+		o.phaseTimeout = d
+	}
+}
+
+func (o *Orchestrator) agentFor(phase domain.Phase) string { return o.agents[phase] }
 
 // CreateWorkItem creates a WorkItem, provisions exactly one worktree, and
 // starts the Discovery phase. It emits workitem.created and phase.started.
@@ -112,6 +159,12 @@ func (o *Orchestrator) CreateWorkItem(ctx context.Context, in CreateWorkItemInpu
 		"phase": string(domain.PhaseDiscovery),
 	}); err != nil {
 		return nil, err
+	}
+
+	if o.autoDrive && o.adapter != nil {
+		go func(id domain.WorkItemID) {
+			_ = o.Drive(context.Background(), id)
+		}(wi.ID)
 	}
 	return wi, nil
 }

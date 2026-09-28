@@ -73,6 +73,18 @@ func runServe(cfg *config.Config) error {
 	store := memory.New()
 	worktrees := service.NewGitWorktreeManager(cfg.Worktree.RootPath)
 	orch := service.New(store, worktrees, adapter)
+	orch.SetAutoDrive(true)
+	orch.SetAutoApprove(cfg.Feature.AutoApproveForTests)
+	orch.SetPhaseTimeout(cfg.OpenCode.DefaultTimeout)
+	orch.SetAgents(
+		cfg.OpenCode.Agents.Discovery,
+		cfg.OpenCode.Agents.Decision,
+		cfg.OpenCode.Agents.Implementation,
+		cfg.OpenCode.Agents.Validation,
+	)
+	if cfg.Feature.AutoApproveForTests {
+		fmt.Fprintln(os.Stderr, "WARNING: auto-approve for tests is ENABLED; the human gate is bypassed")
+	}
 
 	handler := api.NewServer(orch, api.Options{
 		AuthEnabled:  cfg.Auth.Enabled,

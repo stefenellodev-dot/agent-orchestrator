@@ -1,0 +1,25 @@
+[Unit]
+Description=Agent Orchestrator PostgreSQL
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=docker.io/library/postgres:16-alpine
+ContainerName=agent-orchestrator-postgres
+Network=agent-orchestrator-net.network
+Volume=%h/podman-data/agent-orchestrator-postgres:/var/lib/postgresql/data
+Environment=POSTGRES_USER=orchestrator
+Environment=POSTGRES_PASSWORD=orchestrator
+Environment=POSTGRES_DB=orchestrator
+# Bind to loopback only: not exposed publicly.
+PublishPort=127.0.0.1:55432:5432
+HealthCmd=pg_isready -U orchestrator -d orchestrator
+HealthInterval=10s
+HealthStartPeriod=20s
+
+[Service]
+Restart=always
+TimeoutStartSec=180
+
+[Install]
+WantedBy=default.target

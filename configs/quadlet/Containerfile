@@ -1,0 +1,12 @@
+# Container image for the orchestrator + its OpenCode worker (Piave, rootless).
+# Build from the deploy dir:
+#   podman build -t localhost/agent-orchestrator:latest .
+FROM docker.io/library/debian:stable-slim
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY bin/orchestrator /usr/local/bin/orchestrator
+# OpenCode is bind-mounted at /opt/opencode at runtime (ro); put it on PATH.
+ENV PATH="/opt/opencode/bin:${PATH}"
+WORKDIR /var/lib/agent-orchestrator
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/orchestrator"]

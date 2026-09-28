@@ -1,0 +1,25 @@
+[Unit]
+Description=Agent Orchestrator (API + dashboard + OpenCode worker)
+Wants=network-online.target
+After=network-online.target agent-orchestrator-postgres.service
+Requires=agent-orchestrator-postgres.service
+
+[Container]
+Image=localhost/agent-orchestrator:latest
+ContainerName=agent-orchestrator
+Network=agent-orchestrator-net.network
+Volume=%h/.local/share/agent-orchestrator:%h/.local/share/agent-orchestrator
+Volume=%h/.config/agent-orchestrator/orchestrator.yaml:/etc/agent-orchestrator/orchestrator.yaml:ro
+Volume=%h/.local/share/opencode:/root/.local/share/opencode
+Volume=%h/.opencode:/opt/opencode:ro
+EnvironmentFile=%h/.config/agent-orchestrator/secrets.env
+# Dashboard/API bound to loopback only.
+PublishPort=127.0.0.1:18080:8080
+Exec=serve --config /etc/agent-orchestrator/orchestrator.yaml
+
+[Service]
+Restart=always
+TimeoutStartSec=180
+
+[Install]
+WantedBy=default.target

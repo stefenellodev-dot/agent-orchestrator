@@ -1,115 +1,75 @@
-# Piave Deployment Runbook
+# Piave Deployment (Podman + Quadlet + systemd, rootless)
 
-Target: a Linux host running **Podman + Quadlet/systemd**. No Kubernetes, no
-managed infrastructure, no message broker.
+Deployed and verified 2026-09-28. No Kubernetes, no broker, no managed infra.
 
-> **Verification status:** the artifacts below are prepared but the end-to-end
-> Piave run is **PENDING**. Complete `docs/piave-environment.md` first.
-
-## 1. Host layout
+## Topology
 
 ```
-/opt/agent-orchestrator/
-├── bin/orchestrator              # single static Go binary
-└── docs/                         # this runbook, capabilities, env verification
-/etc/agent-orchestrator/
-├── orchestrator.yaml             # config (see configs/config.example.yaml)
-└── secrets.env                   # 0600, owned by orchestrator
-/var/lib/agent-orchestrator/
-├── worktrees/                    # one worktree per WorkItem
-└── (postgres data if local)
+                  Piave (Ubuntu 24.04, rootless podman + user systemd)
+  ┌────────────────────────────────────────────────────────────────────┐
+  │ agent-orchestrator.container        agent-orchestrator-postgres    │
+  │  image localhost/agent-orchestrator  image postgres:16-alpine      │
+  │  API+dashboard+OpenCode worker       data: ~/podman-data/...       │
+  │  127.0.0.1:18080 -> 8080             127.0.0.1:55432 -> 5432        │
+  │         │                                     ▲                    │
+  │         └──────── agent-orchestrator-net ─────┘                    │
+  └────────────────────────────────────────────────────────────────────┘
 ```
 
-## 2. Service user
+## Layout on Piave
+
+```
+~/agent-orchestrator/
+  bin/orchestrator        # cross-compiled linux/amd64 binary
+  Containerfile           # builds localhost/agent-orchestrator:latest
+~/.config/agent-orchestrator/
+  orchestrator.yaml       # config (projects, DSN, agents, model)
+  secrets.env             # 0600
+~/.local/share/agent-orchestrator/
+  worktrees/              # one worktree per WorkItem
+  repos/                  # orchestrator-accessible repositories
+~/.config/containers/systemd/
+  agent-orchestrator-net.network
+  agent-orchestrator-postgres.container
+  agent-orchestrator.container
+```
+
+## Deploy / update
 
 ```bash
-sudo useradd --system --home /var/lib/agent-orchestrator --shell /usr/sbin/nologin orchestrator
-sudo install -d -o orchestrator -g orchestrator /var/lib/agent-orchestrator/worktrees
-sudo install -d -o orchestrator -g orchestrator /etc/agent-orchestrator
+# On macOS: build linux binary with identity
+make build-linux
+scp bin/orchestrator-linux-amd64 piave:~/agent-orchestrator/bin/orchestrator
+
+# On Piave
+ssh piave
+cd ~/agent-orchestrator && podman build -t localhost/agent-orchestrator:latest .
+systemctl --user daemon-reload
+systemctl --user restart agent-orchestrator.service
 ```
 
-## 3. Secrets
-
-`/etc/agent-orchestrator/secrets.env` (chmod 600, chown orchestrator):
-
-```
-OPENCODE_API_KEY=...
-# Provider credentials used by `opencode run`
-DATABASE_URL=postgres://orchestrator:...@localhost:5432/orchestrator?sslmode=disable
-```
-
-Secrets are injected as environment variables only. They are never written into
-a worktree or committed.
-
-## 4. Build and install
+## Operations
 
 ```bash
-make build            # bin/orchestrator
-make web-build        # builds web/ and refreshes internal/web/dashboard
-sudo install -m 0755 bin/orchestrator /opt/agent-orchestrator/bin/orchestrator
+systemctl --user status agent-orchestrator.service
+systemctl --user status agent-orchestrator-postgres.service
+journalctl --user -u agent-orchestrator.service -f
+curl -s -u admin:secret http://127.0.0.1:18080/healthz   # exposes build identity
+podman ps --filter name=agent-orchestrator
 ```
 
-## 5. Database
+## Persistence
 
-```bash
-/opt/agent-orchestrator/bin/orchestrator migrate --config /etc/agent-orchestrator/orchestrator.yaml
-```
+PostgreSQL data lives in `~/podman-data/agent-orchestrator-postgres`. WorkItem
+state, sessions, gates and events survive `systemctl --user restart`.
 
-Idempotent; safe to run on every deploy. Set `store.kind: postgres` in the config.
+## Identity guarantee
 
-## 6. systemd units
+`/healthz` returns `version`, `commit`, `build_time` and the detected
+`opencode` version, so an obsolete binary can never run silently.
 
-```bash
-sudo cp configs/systemd/orchestrator.service     /etc/systemd/system/
-sudo cp configs/systemd/orchestrator-web.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now orchestrator.service orchestrator-web.service
-```
+## Secrets
 
-## 7. Quadlet worker
-
-```bash
-sudo cp configs/quadlet/opencode-worker@.container /etc/containers/systemd/
-sudo systemctl daemon-reload
-# One instance is launched per phase; see the comment header in the .container file.
-```
-
-## 8. Per-project configuration
-
-Project definitions live in `/etc/agent-orchestrator/orchestrator.yaml`
-(orchestrator-owned; consumer repos need no changes):
-
-```yaml
-projects:
-  - name: condosmart
-    repo_path: /srv/repos/condosmart
-    base_branch: main
-    validation_commands: ["npm test"]
-    lint_commands: ["npm run lint"]
-    typecheck_commands: ["npm run typecheck"]
-```
-
-## 9. Verification checklist (must pass before real use)
-
-- [ ] `systemctl status orchestrator` — active (running)
-- [ ] `curl -u admin:... https://host/healthz` — `{"status":"ok"}`
-- [ ] Open the dashboard, create a WorkItem against a **test repo**
-- [ ] It pauses at `awaiting_approval`
-- [ ] Approve in the dashboard → runs to `complete`
-- [ ] `journalctl -u orchestrator -n 100` shows the phase transitions
-- [ ] Worktree removed on `complete`; retained on `failed`/`blocked`
-- [ ] No secrets present anywhere under `/var/lib/agent-orchestrator/worktrees`
-
-## 10. Operations
-
-```bash
-journalctl -u orchestrator.service -f
-systemctl restart orchestrator.service
-# Inspect retained worktrees for a failed WorkItem:
-ls /var/lib/agent-orchestrator/worktrees/
-```
-
-## Rollback
-
-The orchestrator is stateless; roll back by installing the previous binary and
-restarting the unit. Database migrations are additive and idempotent.
+Provider credentials are supplied via the bind-mounted
+`~/.local/share/opencode/auth.json` (`:rw` for session state). No secrets are
+written into worktrees or consumer repositories.

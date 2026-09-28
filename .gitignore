@@ -34,3 +34,4 @@ node_modules/
 
 # Worktrees (local dev)
 worktrees/
+web/tsconfig.tsbuildinfo

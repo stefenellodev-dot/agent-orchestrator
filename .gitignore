@@ -1,0 +1,36 @@
+# Binaries
+bin/
+*.exe
+
+# Environment / secrets
+.env
+.env.local
+*.env
+secrets.env
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Go
+coverage.out
+*.test
+
+# Web
+web/dist/
+web/node_modules/
+node_modules/
+
+# Worktrees (local dev)
+worktrees/

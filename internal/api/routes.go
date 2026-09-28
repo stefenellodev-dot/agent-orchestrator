@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -32,6 +34,8 @@ type Options struct {
 	AuthUsername string
 	AuthPassword string
 	StaticDir    string
+	// StaticFS, when set, serves the embedded dashboard with SPA fallback.
+	StaticFS fs.FS
 }
 
 type server struct {
@@ -71,7 +75,29 @@ func NewServer(svc OrchestratorService, opts Options) http.Handler {
 	if opts.StaticDir != "" {
 		e.Static("/", opts.StaticDir)
 	}
+	if opts.StaticFS != nil {
+		e.GET("/*", echo.WrapHandler(spaHandler(opts.StaticFS)))
+	}
 	return e
+}
+
+// spaHandler serves static assets and falls back to index.html so client-side
+// routes (e.g. #/workitems/<id>) load correctly.
+func spaHandler(staticFS fs.FS) http.Handler {
+	fileServer := http.FileServer(http.FS(staticFS))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/")
+		if path == "" {
+			path = "index.html"
+		}
+		if _, err := fs.Stat(staticFS, path); err != nil {
+			clone := r.Clone(r.Context())
+			clone.URL.Path = "/"
+			fileServer.ServeHTTP(w, clone)
+			return
+		}
+		fileServer.ServeHTTP(w, r)
+	})
 }
 
 func (s *server) health(c echo.Context) error {

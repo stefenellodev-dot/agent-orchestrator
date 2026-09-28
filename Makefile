@@ -22,6 +22,9 @@ migrate: build
 
 web-build:
 	cd web && npm ci && npm run build
+	rm -rf internal/web/dashboard
+	mkdir -p internal/web/dashboard
+	cp -R web/dist/. internal/web/dashboard/
 
 dev: web-build build run
 

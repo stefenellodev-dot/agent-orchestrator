@@ -4,21 +4,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/cobra"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stefenello/agent-orchestrator/internal/api"
 	"github.com/stefenello/agent-orchestrator/internal/config"
 	"github.com/stefenello/agent-orchestrator/internal/service"
 	"github.com/stefenello/agent-orchestrator/internal/store"
 	"github.com/stefenello/agent-orchestrator/internal/store/memory"
 	"github.com/stefenello/agent-orchestrator/internal/store/postgres"
+	"github.com/stefenello/agent-orchestrator/internal/web"
 )
 
 var version = "dev"
@@ -101,7 +103,7 @@ func runServe(cfg *config.Config) error {
 		AuthEnabled:  cfg.Auth.Enabled,
 		AuthUsername: cfg.Auth.Username,
 		AuthPassword: cfg.Auth.Password,
-		StaticDir:    "",
+		StaticFS:     staticFS(cfg),
 	})
 
 	srv := &http.Server{
@@ -134,9 +136,23 @@ func runServe(cfg *config.Config) error {
 func webCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "web",
-		Short: "Start web dashboard server",
-		RunE:  func(cmd *cobra.Command, args []string) error { return errors.New("not implemented") },
+		Short: "Start API server with the web dashboard",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load(configPath(cmd))
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+			return runServe(cfg)
+		},
 	}
+}
+
+// staticFS returns the embedded dashboard when the web UI is enabled.
+func staticFS(cfg *config.Config) fs.FS {
+	if !cfg.Web.Enabled {
+		return nil
+	}
+	return web.Dist()
 }
 
 // buildStore selects the persistence backend from config. The returned cleanup

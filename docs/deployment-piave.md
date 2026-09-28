@@ -21,6 +21,7 @@ no broker, no scp/rsync from a developer machine.
 
 ```
 ~/agent-orchestrator-src/        # deployment checkout (source of truth: GitHub)
+~/go-toolchain/go/               # pinned Go 1.27.1 (build + worker self-validation)
 ~/.config/agent-orchestrator/    # orchestrator.yaml + secrets.env (operator-managed)
 ~/.local/share/agent-orchestrator/{worktrees,repos}
 ~/podman-data/agent-orchestrator-postgres/
@@ -55,13 +56,17 @@ ssh piave
 ```
 
 What it does (fails fast on any error):
-1. `git fetch` from GitHub and **verify the SHA exists**.
-2. `git checkout --detach <SHA>` (exact commit, `git clean -fdx`).
-3. Build the binary in a Go container with `-ldflags` pinning `Version`/`Commit`=SHA/`BuildTime`.
-4. Build the runtime image `localhost/agent-orchestrator:latest`.
-5. Install the Quadlet units from the checkout.
-6. `systemctl --user daemon-reload` + `restart agent-orchestrator.service`.
-7. Poll `/healthz` until the reported `commit` **equals the requested SHA**.
+1. **Preflight**: require `~/go-toolchain/go` and `go version == go1.27.1`.
+2. `git fetch` from GitHub and **verify the SHA exists**.
+3. `git checkout --detach <SHA>` (exact commit, `git clean -fdx`).
+4. Build the binary with `-ldflags` pinning `Version`/`Commit`=SHA/`BuildTime`.
+5. Build the runtime image `localhost/agent-orchestrator:latest`.
+6. Install the Quadlet units from the checkout.
+7. `systemctl --user daemon-reload` + `restart agent-orchestrator.service`.
+8. Poll `/healthz` until the reported `commit` **equals the requested SHA**.
+9. **Worker smoke**: `go version` inside the worker == `go1.27.1`, the toolchain
+   mount is read-only, and `go vet ./...`, `go test ./...`, `go test -race ./...`
+   all exit 0 inside the image.
 
 It never `git pull`s a moving branch and never copies files from a developer
 machine.
@@ -83,6 +88,36 @@ python3 -c 'import zipfile;zipfile.ZipFile("go.zip").extractall(".")'
 mv golang.org/toolchain@v0.0.1-go1.27.1.linux-amd64 go
 rm -rf go.zip golang.org
 ~/go-toolchain/go/bin/go version
+```
+
+### Worker toolchain (objective self-validation)
+
+Validation commands run **inside the worker container** (`sh -c` in the
+worktree, see `internal/service/evidence.go`), not on the host. To let the
+orchestrator validate *itself* (`go test ./...`, `go test -race ./...`,
+`go vet ./...`) the same pinned toolchain is made available to the worker:
+
+- `configs/quadlet/agent-orchestrator.container` mounts it read-only:
+  `Volume=%h/go-toolchain:/opt/go-toolchain:ro`.
+- `configs/quadlet/Containerfile` installs `gcc` + `libc6-dev` (required by
+  `go test -race`, which needs cgo + a C compiler), adds
+  `/opt/go-toolchain/go/bin` to `PATH`, and sets `GOTOOLCHAIN=local` (never
+  downloads another toolchain at runtime) and `GOFLAGS=-mod=readonly` (never
+  edits `go.mod`/`go.sum` during validation).
+- The toolchain is **read-only**; no Podman/Docker socket is added; no extra
+  mounts or ports. Isolation of the worker is unchanged.
+
+**Versioned vs operator-managed config.** The repository ships an *example*
+(`configs/config.example.yaml`) with the `agent-orchestrator` project's
+validation commands. The *effective* project config on Piave lives in the
+operator-managed `~/.config/agent-orchestrator/orchestrator.yaml` (not in Git)
+and must be kept in sync manually — the deploy never overwrites it.
+
+Manual verification:
+
+```bash
+podman exec agent-orchestrator go version                       # go version go1.27.1 linux/amd64
+podman exec agent-orchestrator sh -c 'touch /opt/go-toolchain/x' && echo WRITABLE || echo read-only
 ```
 
 ## Validate

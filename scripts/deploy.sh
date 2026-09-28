@@ -45,8 +45,27 @@ UNITS_DIR="${ORCH_UNITS_DIR:-$HOME/.config/containers/systemd}"
 UNIT="${ORCH_UNIT:-agent-orchestrator.service}"
 IMAGE="localhost/agent-orchestrator:latest"
 PKG="github.com/stefenello/agent-orchestrator/internal/buildinfo"
+GO_HOME="${ORCH_GO_HOME:-$HOME/go-toolchain}"
+GO_REQUIRED="go1.27.1"
 
 say() { printf '\n=== %s ===\n' "$*"; }
+
+# Preflight: the pinned Go toolchain is required both to build the binary and to
+# give the worker objective self-validation. Fail clearly if it is missing or
+# the wrong version (reproducibility guard).
+say "preflight: Go toolchain ($GO_REQUIRED)"
+GO_PRE="$GO_HOME/go/bin/go"
+if [[ ! -x "$GO_PRE" ]]; then
+  echo "FAILED: Go toolchain not found at $GO_PRE" >&2
+  echo "Bootstrap it first (see docs/deployment-piave.md 'Builder toolchain')." >&2
+  exit 1
+fi
+GO_PRE_VERSION="$("$GO_PRE" version | awk '{print $3}')"
+if [[ "$GO_PRE_VERSION" != "$GO_REQUIRED" ]]; then
+  echo "FAILED: toolchain is $GO_PRE_VERSION but $GO_REQUIRED is required" >&2
+  exit 1
+fi
+echo "toolchain ok: $GO_PRE ($GO_PRE_VERSION)"
 
 say "source of truth: $REPO_URL"
 if [[ -d "$SRC/.git" ]]; then
@@ -75,8 +94,8 @@ mkdir -p "$SRC/bin"
 # Prefer a locally provisioned Go toolchain; fall back to a container builder.
 GO_BIN="${ORCH_GO_BIN:-}"
 if [[ -z "$GO_BIN" ]]; then
-  if [[ -x "$HOME/go-toolchain/go/bin/go" ]]; then
-    GO_BIN="$HOME/go-toolchain/go/bin/go"
+  if [[ -x "$GO_HOME/go/bin/go" ]]; then
+    GO_BIN="$GO_HOME/go/bin/go"
   elif command -v go >/dev/null 2>&1; then
     GO_BIN="$(command -v go)"
   fi
@@ -124,6 +143,28 @@ if [[ "$reported" != "$SHA" ]]; then
   echo "FAILED: /healthz reported commit '$reported' but expected '$SHA'" >&2
   exit 1
 fi
+
+say "worker toolchain + objective self-validation smoke"
+gover="$(podman exec agent-orchestrator go version 2>/dev/null || true)"
+echo "worker: ${gover:-<no go>}"
+if [[ "$gover" != "go version ${GO_REQUIRED} "* ]]; then
+  echo "FAILED: worker 'go version' is '${gover:-none}' (expected $GO_REQUIRED)" >&2
+  exit 1
+fi
+# The toolchain must be mounted read-only inside the worker.
+if podman exec agent-orchestrator sh -c 'touch /opt/go-toolchain/.__rwtest' 2>/dev/null; then
+  podman exec agent-orchestrator sh -c 'rm -f /opt/go-toolchain/.__rwtest' 2>/dev/null || true
+  echo "FAILED: /opt/go-toolchain is writable inside the worker" >&2
+  exit 1
+fi
+echo "toolchain mount is read-only (ok)"
+# Run the three objective validations inside the image against the source at SHA.
+podman run --rm --entrypoint sh \
+  -v "$SRC:/src:ro" \
+  -v "$GO_HOME:/opt/go-toolchain:ro" \
+  -v orchestrator-gomod:/root/go/pkg/mod \
+  -w /src "$IMAGE" \
+  -c 'set -e; go version; go vet ./...; go test ./...; go test -race ./...'
 
 say "DEPLOYED $SHA"
 curl -s -u "$AUTH" "$HEALTH_URL"; echo

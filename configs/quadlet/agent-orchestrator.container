@@ -12,6 +12,8 @@ Volume=%h/.local/share/agent-orchestrator:%h/.local/share/agent-orchestrator
 Volume=%h/.config/agent-orchestrator/orchestrator.yaml:/etc/agent-orchestrator/orchestrator.yaml:ro
 Volume=%h/.local/share/opencode:/root/.local/share/opencode
 Volume=%h/.opencode:/opt/opencode:ro
+# Pinned Go 1.27.1 toolchain for objective self-validation (read-only).
+Volume=%h/go-toolchain:/opt/go-toolchain:ro
 EnvironmentFile=%h/.config/agent-orchestrator/secrets.env
 # Dashboard/API bound to loopback only.
 PublishPort=127.0.0.1:18080:8080

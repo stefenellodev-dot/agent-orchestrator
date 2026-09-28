@@ -12,7 +12,7 @@
 | Git | 2.43.0 |
 | OpenCode | `/home/stefenello/.opencode/bin/opencode` v1.15.12 |
 | PostgreSQL | not native — run as a rootless Podman Quadlet container |
-| Go | not installed on host — binary cross-compiled on macOS |
+| Go | no system Go; pinned **Go 1.27.1** at `~/go-toolchain/go` (build + worker self-validation) |
 | Quadlet dirs | `~/.config/containers/systemd/` (user) |
 
 ## Verified commands
@@ -34,6 +34,7 @@ loginctl show-user stefenello | grep Linger        # Linger=yes
 | SELinux relabel | none needed | Ubuntu uses AppArmor, not SELinux |
 | PostgreSQL | container `docker.io/library/postgres:16-alpine` | no native PG on host |
 | OpenCode | native binary, bind-mounted into the orchestrator container | public OpenCode container images are not pullable |
+| Go toolchain | pinned `~/go-toolchain/go` (go1.27.1), bind-mounted **read-only** into the worker at `/opt/go-toolchain` | reuses the toolchain the binary is built with; no image bloat; enables objective self-validation |
 | Network | rootless podman network `agent-orchestrator-net` | isolate from other host services |
 | Ports | `127.0.0.1:18080` (API) and `127.0.0.1:55432` (PG) | loopback only — no public exposure |
 
@@ -44,3 +45,9 @@ pullable (403 / access denied). The deployment therefore runs the verified
 native OpenCode binary from `~/.opencode/bin`, bind-mounted read-only into the
 orchestrator container at `/opt/opencode`. No plugin or application is installed
 inside CondoSmart or fin-engine.
+
+## Worker Go toolchain
+
+The worker image installs `gcc` + `libc6-dev` (for `go test -race`) and puts the
+read-only mounted toolchain on `PATH` with `GOTOOLCHAIN=local` and
+`GOFLAGS=-mod=readonly`. See `docs/deployment-piave.md` → "Worker toolchain".

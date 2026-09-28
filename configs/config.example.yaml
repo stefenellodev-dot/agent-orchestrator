@@ -58,9 +58,11 @@ projects:
   - name: "agent-orchestrator"
     repo_path: "/Users/stefenello/development/agent-orchestrator"
     base_branch: "main"
+    # Objective self-validation. Requires the pinned Go toolchain mounted into
+    # the worker (see docs/deployment-piave.md).
     validation_commands:
-      - "go build ./..."
-    lint_commands:
+      - "go test ./..."
+      - "go test -race ./..."
       - "go vet ./..."
   - name: "fin-engine-v1"
     repo_path: "/Users/stefenello/development/fin-engine-desa"

@@ -2,11 +2,19 @@
 # Build from the deploy dir:
 #   podman build -t localhost/agent-orchestrator:latest .
 FROM docker.io/library/debian:stable-slim
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+# git + ca-certificates for repo operations; gcc + libc6-dev are required by
+# `go test -race` (cgo needs a C toolchain).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git ca-certificates gcc libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 COPY bin/orchestrator /usr/local/bin/orchestrator
-# OpenCode is bind-mounted at /opt/opencode at runtime (ro); put it on PATH.
-ENV PATH="/opt/opencode/bin:${PATH}"
+# OpenCode and the pinned Go toolchain are bind-mounted read-only at runtime
+# (/opt/opencode and /opt/go-toolchain). GOTOOLCHAIN=local forbids `go` from
+# downloading a different toolchain at runtime; -mod=readonly keeps go.mod and
+# go.sum untouched during validation.
+ENV PATH="/opt/go-toolchain/go/bin:/opt/opencode/bin:${PATH}"
+ENV GOTOOLCHAIN=local
+ENV GOFLAGS=-mod=readonly
 WORKDIR /var/lib/agent-orchestrator
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/orchestrator"]

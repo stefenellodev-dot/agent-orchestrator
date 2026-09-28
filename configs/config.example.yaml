@@ -1,0 +1,53 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+# storage: "memory" for local skeleton, "postgres" for persistent runs
+store:
+  kind: "memory"
+
+database:
+  dsn: "postgres://orchestrator:orchestrator@localhost:5432/orchestrator?sslmode=disable"
+  max_open_conns: 10
+  max_idle_conns: 5
+  conn_max_lifetime: "1h"
+
+worktree:
+  root_path: "/var/lib/agent-orchestrator/worktrees"
+  retain_days: 7
+  retain_failed_days: 30
+
+opencode:
+  binary_path: "opencode"
+  default_timeout: "10m"
+  agents:
+    discovery: "explore"
+    decision: "plan"
+    implementation: "build"
+    validation: "build"
+
+concurrency:
+  # MVP default: one active WorkItem per project.
+  max_active_per_project: 1
+
+auth:
+  enabled: true
+  username: "admin"
+  password: "changeme"
+
+web:
+  enabled: true
+  static_path: "./web/dist"
+
+feature:
+  # Test-only escape hatch. MUST stay false in production.
+  auto_approve_for_tests: false
+
+# Orchestrator-owned project definitions. Consumer repos need no changes.
+projects: []
+#  - name: "condosmart"
+#    repo_path: "/srv/repos/condosmart"
+#    base_branch: "main"
+#    validation_commands: ["npm test"]
+#    lint_commands: ["npm run lint"]
+#    typecheck_commands: ["npm run typecheck"]

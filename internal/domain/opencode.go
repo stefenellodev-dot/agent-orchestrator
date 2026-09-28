@@ -31,6 +31,9 @@ type RunResult struct {
 	Stdout          string
 	Stderr          string
 	OpenCodeSession string
+	// AgentText is the assistant's final text, extracted from the output when
+	// the format is understood. Best-effort.
+	AgentText string
 	// Objective evidence, collected by the adapter (not self-reported).
 	BaseCommitSHA string
 	CommitSHA     string

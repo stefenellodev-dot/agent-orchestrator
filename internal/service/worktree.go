@@ -119,6 +119,31 @@ func branchExists(ctx context.Context, repoPath, branch string) bool {
 	return err == nil
 }
 
+// gitCommitAll stages and commits every change in a worktree, returning whether
+// a commit was created. An explicit identity is supplied so commits succeed even
+// when the repository has no user configured.
+func gitCommitAll(ctx context.Context, worktreePath, message string) (bool, error) {
+	status, err := runGitCommand(ctx, worktreePath, "status", "--porcelain")
+	if err != nil {
+		return false, err
+	}
+	if strings.TrimSpace(status) == "" {
+		return false, nil
+	}
+	if _, err := runGitCommand(ctx, worktreePath, "add", "-A"); err != nil {
+		return false, err
+	}
+	cmd := exec.CommandContext(ctx, "git",
+		"-c", "user.email=orchestrator@localhost",
+		"-c", "user.name=orchestrator",
+		"commit", "-m", message)
+	cmd.Dir = worktreePath
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return false, fmt.Errorf("git commit: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return true, nil
+}
+
 func runGitCommand(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir

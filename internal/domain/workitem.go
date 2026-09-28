@@ -238,6 +238,7 @@ const (
 	EventSessionCompleted     EventType = "session.completed"
 	EventSessionFailed        EventType = "session.failed"
 	EventWorktreeCreated      EventType = "worktree.created"
+	EventWorktreeCommitted    EventType = "worktree.committed"
 	EventWorktreeCleaned      EventType = "worktree.cleaned"
 	EventAuthorizationGranted EventType = "authorization.granted"
 	EventAuthorizationDenied  EventType = "authorization.denied"

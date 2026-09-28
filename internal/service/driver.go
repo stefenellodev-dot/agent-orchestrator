@@ -57,6 +57,10 @@ func (o *Orchestrator) Drive(ctx context.Context, id domain.WorkItemID) error {
 			return o.markFailed(ctx, wi, fmt.Errorf("%s phase exited %d", phase, res.ExitCode))
 		}
 
+		if phase == domain.PhaseImplementation {
+			o.commitImplementation(ctx, wi)
+		}
+
 		next := phase.Next()
 		if next == domain.PhaseAwaitingApproval {
 			if err := o.createGate(ctx, wi, res); err != nil {
@@ -81,7 +85,7 @@ func (o *Orchestrator) executePhase(ctx context.Context, wi *domain.WorkItem) (*
 	}
 
 	agent := o.agentFor(wi.CurrentPhase)
-	prompt := PromptFor(wi, wi.CurrentPhase)
+	prompt := PromptFor(wi, wi.CurrentPhase, o.approvedPlanFor(ctx, wi, wi.CurrentPhase))
 
 	sess := &domain.Session{
 		ID:         domain.NewSessionID(),
@@ -128,6 +132,7 @@ func (o *Orchestrator) executePhase(ctx context.Context, wi *domain.WorkItem) (*
 	sess.ExitCode = res.ExitCode
 	sess.OpenCodeSession = res.OpenCodeSession
 	sess.Output = &domain.SessionOutput{
+		AgentText:        res.AgentText,
 		BaseCommitSHA:    res.BaseCommitSHA,
 		CommitSHA:        res.CommitSHA,
 		Diff:             res.Diff,
@@ -152,6 +157,81 @@ func (o *Orchestrator) executePhase(ctx context.Context, wi *domain.WorkItem) (*
 		"exit_code":  res.ExitCode,
 	})
 	return res, nil
+}
+
+// commitImplementation guarantees the implementation produces a commit and
+// refreshes the implementation session's git evidence to match it. This keeps
+// the commit SHA and diff reproducible even if the agent forgot to commit.
+func (o *Orchestrator) commitImplementation(ctx context.Context, wi *domain.WorkItem) {
+	message := fmt.Sprintf("orchestrator: implement %q (%s)", wi.Title, wi.ID)
+	committed, err := gitCommitAll(ctx, wi.WorktreePath, message)
+	if err != nil || !committed {
+		return
+	}
+	head, _ := revParse(ctx, wi.WorktreePath)
+	_ = o.appendEvent(ctx, wi.ID, domain.EventWorktreeCommitted, domain.ActorSystem, map[string]any{
+		"commit_sha": head,
+	})
+
+	sessions, err := o.store.ListSessions(ctx, wi.ID)
+	if err != nil {
+		return
+	}
+	for i := len(sessions) - 1; i >= 0; i-- {
+		if sessions[i].Phase != domain.PhaseImplementation {
+			continue
+		}
+		sess := sessions[i]
+		if sess.Output == nil {
+			sess.Output = &domain.SessionOutput{}
+		}
+		sess.Output.CommitSHA = head
+		if base := sess.Output.BaseCommitSHA; base != "" && head != "" && base != head {
+			if diff, err := runGitCommand(ctx, wi.WorktreePath, "diff", base+".."+head); err == nil {
+				sess.Output.Diff = diff
+			}
+			if stat, err := runGitCommand(ctx, wi.WorktreePath, "diff", "--stat", base+".."+head); err == nil {
+				sess.Output.DiffStat = stat
+			}
+		}
+		_ = o.store.UpdateSession(ctx, sess)
+		return
+	}
+}
+
+// approvedPlanFor returns the human-approved plan text (Discovery + Decision)
+// for the Implementation phase. It is empty for every other phase.
+func (o *Orchestrator) approvedPlanFor(ctx context.Context, wi *domain.WorkItem, phase domain.Phase) string {
+	if phase != domain.PhaseImplementation {
+		return ""
+	}
+	sessions, err := o.store.ListSessions(ctx, wi.ID)
+	if err != nil {
+		return ""
+	}
+	var discovery, decision string
+	for _, s := range sessions {
+		if s.Output == nil {
+			continue
+		}
+		switch s.Phase {
+		case domain.PhaseDiscovery:
+			discovery = s.Output.AgentText
+		case domain.PhaseDecision:
+			decision = s.Output.AgentText
+		}
+	}
+	var b strings.Builder
+	if strings.TrimSpace(discovery) != "" {
+		b.WriteString("## Discovery\n")
+		b.WriteString(discovery)
+		b.WriteString("\n\n")
+	}
+	if strings.TrimSpace(decision) != "" {
+		b.WriteString("## Decision\n")
+		b.WriteString(decision)
+	}
+	return b.String()
 }
 
 // createGate opens (or re-opens) the human approval gate after Decision

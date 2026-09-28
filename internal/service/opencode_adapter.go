@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -106,6 +107,7 @@ func (a *CLIAdapter) Run(ctx context.Context, req domain.RunRequest) (*domain.Ru
 		ExitCode:      exitCode,
 		Stdout:        stdout.String(),
 		Stderr:        stderr.String(),
+		AgentText:     extractAgentText(stdout.String()),
 		BaseCommitSHA: base,
 		CommitSHA:     postHead,
 	}
@@ -166,4 +168,33 @@ func mapToEnv(m map[string]string) []string {
 		out = append(out, k+"="+v)
 	}
 	return out
+}
+
+// extractAgentText pulls assistant text parts out of OpenCode's `--format json`
+// JSONL stream. It is deliberately tolerant: unrecognized lines are ignored.
+func extractAgentText(stdout string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "{") {
+			continue
+		}
+		var ev struct {
+			Type string `json:"type"`
+			Part struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"part"`
+		}
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			continue
+		}
+		if ev.Type == "text" && ev.Part.Type == "text" && ev.Part.Text != "" {
+			if b.Len() > 0 {
+				b.WriteString("\n")
+			}
+			b.WriteString(ev.Part.Text)
+		}
+	}
+	return strings.TrimSpace(b.String())
 }

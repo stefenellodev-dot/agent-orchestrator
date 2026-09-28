@@ -46,6 +46,10 @@ type Artifact struct {
 // SessionOutput holds objective, reproducible evidence produced by a phase.
 // Agent self-reported confidence is NOT part of the completion decision.
 type SessionOutput struct {
+	// AgentText is the assistant's produced text for the phase. It is context
+	// for later phases, never evidence of completion.
+	AgentText string `json:"agent_text,omitempty"`
+
 	// Git evidence
 	BaseCommitSHA string `json:"base_commit_sha,omitempty"`
 	CommitSHA     string `json:"commit_sha,omitempty"`

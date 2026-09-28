@@ -52,3 +52,23 @@ func (r approvalRequest) toInput() service.ApprovalInput {
 	}
 	return service.ApprovalInput{User: user, Comment: r.Comment}
 }
+
+type retryRequest struct {
+	User    string `json:"user"`
+	Comment string `json:"comment"`
+	From    string `json:"from"`
+	Rebase  bool   `json:"rebase"`
+}
+
+func (r retryRequest) toInput() service.RetryInput {
+	user := r.User
+	if user == "" {
+		user = "unknown"
+	}
+	return service.RetryInput{
+		User:    user,
+		Comment: r.Comment,
+		From:    domain.Phase(r.From),
+		Rebase:  r.Rebase,
+	}
+}

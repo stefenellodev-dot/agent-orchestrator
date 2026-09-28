@@ -16,6 +16,8 @@ type Worktree struct {
 	Path       string
 	Branch     string
 	BaseBranch string
+	// BaseCommitSHA is the immutable commit this worktree branched from.
+	BaseCommitSHA string
 }
 
 // WorktreeManager owns the worktree lifecycle. One WorkItem owns exactly one
@@ -63,6 +65,7 @@ func (m *GitWorktreeManager) Create(ctx context.Context, workItemID, repoPath, b
 	wt := &Worktree{WorkItemID: workItemID, Path: path, Branch: branchNameFor(workItemID), BaseBranch: baseBranch}
 
 	if isWorktree(path) {
+		wt.BaseCommitSHA = resolveBaseSHA(ctx, path, baseBranch)
 		return wt, nil
 	}
 
@@ -85,7 +88,26 @@ func (m *GitWorktreeManager) Create(ctx context.Context, workItemID, repoPath, b
 	if !isWorktree(path) {
 		return nil, fmt.Errorf("worktree at %s was not created correctly", path)
 	}
+	// The branch was just created from baseBranch, so HEAD is the immutable base.
+	wt.BaseCommitSHA = resolveBaseSHA(ctx, path, baseBranch)
 	return wt, nil
+}
+
+// resolveBaseSHA returns the immutable commit the worktree branched from: the
+// merge-base with the base branch (the branch point). This is stable even after
+// the base branch advances.
+func resolveBaseSHA(ctx context.Context, worktreePath, baseBranch string) string {
+	if baseBranch != "" {
+		if out, err := runGitCommand(ctx, worktreePath, "merge-base", baseBranch, "HEAD"); err == nil {
+			if sha := strings.TrimSpace(out); sha != "" {
+				return sha
+			}
+		}
+	}
+	if head, err := revParse(ctx, worktreePath); err == nil {
+		return head
+	}
+	return ""
 }
 
 // Cleanup removes the WorkItem's worktree. Missing worktrees are not an error.

@@ -95,12 +95,16 @@ type WorkItem struct {
 	Status       Phase      `json:"status"`
 	CurrentPhase Phase      `json:"current_phase"`
 	// WorktreePath is provisioned once and reused for every phase.
-	WorktreePath string    `json:"worktree_path"`
-	BaseBranch   string    `json:"base_branch"`
-	Assignee     string    `json:"assignee,omitempty"`
-	Metadata     Metadata  `json:"metadata"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	WorktreePath string `json:"worktree_path"`
+	BaseBranch   string `json:"base_branch"`
+	// BaseCommitSHA is the immutable commit the WorkItem was branched from.
+	// Evidence is always computed against this SHA, never against a moving
+	// branch reference.
+	BaseCommitSHA string    `json:"base_commit_sha,omitempty"`
+	Assignee      string    `json:"assignee,omitempty"`
+	Metadata      Metadata  `json:"metadata"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // Metadata is free-form, non-authoritative data. It must never drive state.
@@ -242,6 +246,7 @@ const (
 	EventWorktreeCleaned      EventType = "worktree.cleaned"
 	EventAuthorizationGranted EventType = "authorization.granted"
 	EventAuthorizationDenied  EventType = "authorization.denied"
+	EventWorkItemRetried      EventType = "workitem.retried"
 )
 
 // Event is an immutable audit-log entry. Persistence (Postgres) is the audit

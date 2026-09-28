@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/stefenello/agent-orchestrator/internal/domain"
@@ -60,10 +61,20 @@ type Orchestrator struct {
 // ProjectConfig is the orchestrator-owned definition of a project. Consumer
 // repositories need no changes; paths and validation commands live here.
 type ProjectConfig struct {
-	Name       string
-	RepoPath   string
-	BaseBranch string
-	Validation ProjectValidation
+	Name       string            `json:"name"`
+	RepoPath   string            `json:"repo_path"`
+	BaseBranch string            `json:"base_branch"`
+	Validation ProjectValidation `json:"validation"`
+}
+
+// ProjectList returns the registered projects, ordered by name.
+func (o *Orchestrator) ProjectList() []ProjectConfig {
+	out := make([]ProjectConfig, 0, len(o.projects))
+	for _, pc := range o.projects {
+		out = append(out, pc)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }
 
 // New builds an Orchestrator. adapter may be nil; phases that require OpenCode
@@ -185,6 +196,7 @@ func (o *Orchestrator) CreateWorkItem(ctx context.Context, in CreateWorkItemInpu
 		return nil, fmt.Errorf("provision worktree: %w", err)
 	}
 	wi.WorktreePath = wt.Path
+	wi.BaseCommitSHA = wt.BaseCommitSHA
 
 	if err := o.store.CreateWorkItem(ctx, wi); err != nil {
 		// The store rejected the WorkItem (e.g. project concurrency limit);

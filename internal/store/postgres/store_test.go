@@ -35,11 +35,12 @@ func TestStore_WorkItemRoundTrip(t *testing.T) {
 		Priority:     domain.PriorityHigh,
 		Status:       domain.PhaseDiscovery,
 		CurrentPhase: domain.PhaseDiscovery,
-		WorktreePath: "/wt/WI-1",
-		BaseBranch:   "main",
-		Metadata:     domain.Metadata{"k": "v"},
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		WorktreePath:  "/wt/WI-1",
+		BaseBranch:    "main",
+		BaseCommitSHA: "deadbeefcafe",
+		Metadata:      domain.Metadata{"k": "v"},
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 	require.NoError(t, st.CreateWorkItem(ctx, wi))
 
@@ -47,6 +48,7 @@ func TestStore_WorkItemRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, wi.ID, got.ID)
 	assert.Equal(t, domain.PriorityHigh, got.Priority)
+	assert.Equal(t, "deadbeefcafe", got.BaseCommitSHA, "immutable base commit must persist")
 	assert.Equal(t, "v", got.Metadata["k"])
 	assert.WithinDuration(t, now, got.CreatedAt, time.Millisecond)
 

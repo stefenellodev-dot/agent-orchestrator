@@ -8,7 +8,7 @@ import (
 )
 
 const workItemColumns = `id, project, title, description, priority, status, current_phase,
-	worktree_path, base_branch, assignee, metadata, created_at, updated_at`
+	worktree_path, base_branch, base_commit_sha, assignee, metadata, created_at, updated_at`
 
 func (s *Store) CreateWorkItem(ctx context.Context, wi *domain.WorkItem) error {
 	meta := wi.Metadata
@@ -17,10 +17,10 @@ func (s *Store) CreateWorkItem(ctx context.Context, wi *domain.WorkItem) error {
 	}
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO work_items (`+workItemColumns+`)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13)`,
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14)`,
 		string(wi.ID), wi.Project, wi.Title, wi.Description, string(wi.Priority),
 		string(wi.Status), string(wi.CurrentPhase), wi.WorktreePath, wi.BaseBranch,
-		wi.Assignee, mustJSON(meta), wi.CreatedAt, wi.UpdatedAt)
+		wi.BaseCommitSHA, wi.Assignee, mustJSON(meta), wi.CreatedAt, wi.UpdatedAt)
 	return mapWriteErr(err)
 }
 
@@ -41,11 +41,11 @@ func (s *Store) UpdateWorkItem(ctx context.Context, wi *domain.WorkItem) error {
 	tag, err := s.pool.Exec(ctx, `
 		UPDATE work_items SET
 			project=$2, title=$3, description=$4, priority=$5, status=$6, current_phase=$7,
-			worktree_path=$8, base_branch=$9, assignee=$10, metadata=$11::jsonb, updated_at=$12
+			worktree_path=$8, base_branch=$9, base_commit_sha=$10, assignee=$11, metadata=$12::jsonb, updated_at=$13
 		WHERE id=$1`,
 		string(wi.ID), wi.Project, wi.Title, wi.Description, string(wi.Priority),
 		string(wi.Status), string(wi.CurrentPhase), wi.WorktreePath, wi.BaseBranch,
-		wi.Assignee, mustJSON(meta), wi.UpdatedAt)
+		wi.BaseCommitSHA, wi.Assignee, mustJSON(meta), wi.UpdatedAt)
 	if err != nil {
 		return mapWriteErr(err)
 	}
@@ -87,14 +87,14 @@ type rowScanner interface {
 
 func scanWorkItem(row rowScanner) (*domain.WorkItem, error) {
 	var (
-		wi                                 domain.WorkItem
-		id, project, title, description    string
-		priority, status, phase            string
-		worktreePath, baseBranch, assignee string
-		metaRaw                            []byte
+		wi                                             domain.WorkItem
+		id, project, title, description                string
+		priority, status, phase                        string
+		worktreePath, baseBranch, baseCommit, assignee string
+		metaRaw                                        []byte
 	)
 	if err := row.Scan(&id, &project, &title, &description, &priority, &status, &phase,
-		&worktreePath, &baseBranch, &assignee, &metaRaw, &wi.CreatedAt, &wi.UpdatedAt); err != nil {
+		&worktreePath, &baseBranch, &baseCommit, &assignee, &metaRaw, &wi.CreatedAt, &wi.UpdatedAt); err != nil {
 		return nil, err
 	}
 	wi.ID = domain.WorkItemID(id)
@@ -106,6 +106,7 @@ func scanWorkItem(row rowScanner) (*domain.WorkItem, error) {
 	wi.CurrentPhase = domain.Phase(phase)
 	wi.WorktreePath = worktreePath
 	wi.BaseBranch = baseBranch
+	wi.BaseCommitSHA = baseCommit
 	wi.Assignee = assignee
 	wi.Metadata = domain.Metadata{}
 	_ = unmarshal(metaRaw, &wi.Metadata)

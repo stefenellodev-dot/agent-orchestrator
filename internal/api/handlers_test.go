@@ -22,6 +22,7 @@ type stubService struct {
 	events       map[domain.WorkItemID][]*domain.Event
 	gates        map[domain.WorkItemID]*domain.Gate
 	lastApproval service.ApprovalInput
+	lastRetry    service.RetryInput
 }
 
 func newStubService() *stubService {
@@ -53,6 +54,15 @@ func (s *stubService) Reject(_ context.Context, _ domain.WorkItemID, in service.
 func (s *stubService) RequestChanges(_ context.Context, _ domain.WorkItemID, in service.ApprovalInput) error {
 	s.lastApproval = in
 	return nil
+}
+
+func (s *stubService) Retry(_ context.Context, _ domain.WorkItemID, in service.RetryInput) error {
+	s.lastRetry = in
+	return nil
+}
+
+func (s *stubService) ProjectList() []service.ProjectConfig {
+	return []service.ProjectConfig{{Name: "p", RepoPath: "/repo", BaseBranch: "main"}}
 }
 
 func (s *stubService) CreateWorkItem(_ context.Context, in service.CreateWorkItemInput) (*domain.WorkItem, error) {

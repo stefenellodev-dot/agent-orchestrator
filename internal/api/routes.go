@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 
+	"github.com/stefenello/agent-orchestrator/internal/buildinfo"
 	"github.com/stefenello/agent-orchestrator/internal/domain"
 	"github.com/stefenello/agent-orchestrator/internal/service"
 )
@@ -26,6 +27,8 @@ type OrchestratorService interface {
 	Approve(ctx context.Context, id domain.WorkItemID, in service.ApprovalInput) error
 	Reject(ctx context.Context, id domain.WorkItemID, in service.ApprovalInput) error
 	RequestChanges(ctx context.Context, id domain.WorkItemID, in service.ApprovalInput) error
+	Retry(ctx context.Context, id domain.WorkItemID, in service.RetryInput) error
+	ProjectList() []service.ProjectConfig
 }
 
 // Options configures the HTTP server.
@@ -36,6 +39,8 @@ type Options struct {
 	StaticDir    string
 	// StaticFS, when set, serves the embedded dashboard with SPA fallback.
 	StaticFS fs.FS
+	// BuildInfo is exposed via /healthz so a stale binary is always visible.
+	BuildInfo buildinfo.Info
 }
 
 type server struct {
@@ -71,6 +76,8 @@ func NewServer(svc OrchestratorService, opts Options) http.Handler {
 	api.POST("/workitems/:id/approve", s.approve)
 	api.POST("/workitems/:id/reject", s.reject)
 	api.POST("/workitems/:id/request-changes", s.requestChanges)
+	api.POST("/workitems/:id/retry", s.retry)
+	api.GET("/projects", s.listProjects)
 
 	if opts.StaticDir != "" {
 		e.Static("/", opts.StaticDir)
@@ -101,7 +108,19 @@ func spaHandler(staticFS fs.FS) http.Handler {
 }
 
 func (s *server) health(c echo.Context) error {
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	info := s.opts.BuildInfo
+	return c.JSON(http.StatusOK, map[string]any{
+		"status":     "ok",
+		"version":    info.Version,
+		"commit":     info.Commit,
+		"build_time": info.BuildTime,
+		"opencode":   info.OpenCode,
+		"agents":     info.Agents,
+	})
+}
+
+func (s *server) listProjects(c echo.Context) error {
+	return c.JSON(http.StatusOK, s.svc.ProjectList())
 }
 
 func (s *server) createWorkItem(c echo.Context) error {
@@ -171,6 +190,17 @@ func (s *server) reject(c echo.Context) error { return s.decide(c, s.svc.Reject)
 
 func (s *server) requestChanges(c echo.Context) error { return s.decide(c, s.svc.RequestChanges) }
 
+func (s *server) retry(c echo.Context) error {
+	var req retryRequest
+	if err := c.Bind(&req); err != nil {
+		return apiError(c, service.ErrInvalidInput)
+	}
+	if err := s.svc.Retry(c.Request().Context(), domain.WorkItemID(c.Param("id")), req.toInput()); err != nil {
+		return apiError(c, err)
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (s *server) decide(c echo.Context, fn func(context.Context, domain.WorkItemID, service.ApprovalInput) error) error {
 	var req approvalRequest
 	if err := c.Bind(&req); err != nil {
@@ -188,7 +218,7 @@ func apiError(c echo.Context, err error) error {
 	switch {
 	case errors.Is(err, service.ErrNotFound):
 		status = http.StatusNotFound
-	case errors.Is(err, service.ErrInvalidInput), errors.Is(err, service.ErrInvalidTransition):
+	case errors.Is(err, service.ErrInvalidInput), errors.Is(err, service.ErrInvalidTransition), errors.Is(err, service.ErrNotRetryable):
 		status = http.StatusBadRequest
 	case errors.Is(err, service.ErrProjectBusy):
 		status = http.StatusConflict

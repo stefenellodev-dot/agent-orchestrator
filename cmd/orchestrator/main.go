@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/stefenello/agent-orchestrator/internal/api"
+	"github.com/stefenello/agent-orchestrator/internal/buildinfo"
 	"github.com/stefenello/agent-orchestrator/internal/config"
 	"github.com/stefenello/agent-orchestrator/internal/domain"
 	"github.com/stefenello/agent-orchestrator/internal/service"
@@ -25,12 +27,10 @@ import (
 	"github.com/stefenello/agent-orchestrator/internal/web"
 )
 
-var version = "dev"
-
 func main() {
 	rootCmd := &cobra.Command{
 		Use:     "orchestrator",
-		Version: version,
+		Version: buildinfo.Version,
 		Short:   "Human-in-the-Loop Agent Orchestrator for OpenCode",
 	}
 	rootCmd.PersistentFlags().String("config", "configs/config.example.yaml", "path to config file")
@@ -66,10 +66,15 @@ func serveCmd() *cobra.Command {
 }
 
 func runServe(cfg *config.Config) error {
+	id := buildinfo.Current()
+	fmt.Fprintf(os.Stderr, "orchestrator starting: %s\n", id.String())
+
 	adapter := service.NewCLIAdapter(cfg.OpenCode.BinaryPath)
 	if caps, err := adapter.ValidateCLI(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: opencode CLI probe failed: %v\n", err)
 	} else {
+		id.OpenCode = caps.Version
+		id.Agents = strings.Join(caps.SupportedAgents, ",")
 		fmt.Fprintf(os.Stderr, "opencode %s detected (agents: %v)\n", caps.Version, caps.SupportedAgents)
 	}
 
@@ -112,6 +117,7 @@ func runServe(cfg *config.Config) error {
 		AuthUsername: cfg.Auth.Username,
 		AuthPassword: cfg.Auth.Password,
 		StaticFS:     staticFS(cfg),
+		BuildInfo:    id,
 	})
 
 	srv := &http.Server{

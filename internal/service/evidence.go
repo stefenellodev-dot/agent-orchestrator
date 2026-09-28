@@ -14,9 +14,9 @@ import (
 // ProjectValidation is the orchestrator-owned set of objective commands run to
 // validate a WorkItem. Consumer repositories need no changes.
 type ProjectValidation struct {
-	TestCommands      []string
-	LintCommands      []string
-	TypecheckCommands []string
+	TestCommands      []string `json:"test_commands,omitempty"`
+	LintCommands      []string `json:"lint_commands,omitempty"`
+	TypecheckCommands []string `json:"typecheck_commands,omitempty"`
 }
 
 // EvidenceCollector produces objective, reproducible evidence: git identity of
@@ -30,16 +30,19 @@ func NewEvidenceCollector() *EvidenceCollector {
 }
 
 // Collect gathers git evidence and runs the validation commands in the worktree.
-func (c *EvidenceCollector) Collect(ctx context.Context, worktree, baseBranch string, pv ProjectValidation) (*domain.SessionOutput, error) {
+// The diff is always computed against the immutable baseCommitSHA when provided;
+// otherwise the branch point (merge-base) is resolved. A moving base branch can
+// never contaminate the evidence.
+func (c *EvidenceCollector) Collect(ctx context.Context, worktree, baseBranch, baseCommitSHA string, pv ProjectValidation) (*domain.SessionOutput, error) {
 	out := &domain.SessionOutput{}
 
-	out.BaseCommitSHA, _ = revParse(ctx, worktree)
-	if baseBranch != "" {
-		if baseSHA, err := runGitCommand(ctx, worktree, "rev-parse", baseBranch); err == nil {
-			out.BaseCommitSHA = strings.TrimSpace(baseSHA)
-		}
-	}
 	out.CommitSHA, _ = revParse(ctx, worktree)
+
+	base := strings.TrimSpace(baseCommitSHA)
+	if base == "" {
+		base = resolveBaseSHA(ctx, worktree, baseBranch)
+	}
+	out.BaseCommitSHA = base
 
 	if out.BaseCommitSHA != "" && out.CommitSHA != "" && out.BaseCommitSHA != out.CommitSHA {
 		if diff, err := runGitCommand(ctx, worktree, "diff", out.BaseCommitSHA+".."+out.CommitSHA); err == nil {

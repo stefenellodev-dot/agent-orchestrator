@@ -1,12 +1,22 @@
 BINARY := orchestrator
 BUILD_DIR := bin
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -ldflags="-s -w -X main.version=$(VERSION)"
+COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+BUILD_TIME := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+PKG := github.com/stefenello/agent-orchestrator/internal/buildinfo
+LDFLAGS := -ldflags="-s -w -X $(PKG).Version=$(VERSION) -X $(PKG).Commit=$(COMMIT) -X $(PKG).BuildTime=$(BUILD_TIME)"
+
+# Cross-compile target for Piave (linux/amd64).
+GOOS ?= $(shell go env GOOS)
+GOARCH ?= $(shell go env GOARCH)
 
 .PHONY: build test lint run migrate web-build dev clean
 
 build:
-	CGO_ENABLED=0 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY) ./cmd/orchestrator
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY) ./cmd/orchestrator
+
+build-linux:
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY)-linux-amd64 ./cmd/orchestrator
 
 test:
 	go test -race -count=1 ./...

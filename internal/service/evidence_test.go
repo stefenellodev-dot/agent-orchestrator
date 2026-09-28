@@ -22,7 +22,7 @@ func TestEvidenceCollector_CapturesGitAndCommands(t *testing.T) {
 	runGit(t, repo, "commit", "-m", "feature")
 
 	col := service.NewEvidenceCollector()
-	out, err := col.Collect(ctx, repo, "main", service.ProjectValidation{
+	out, err := col.Collect(ctx, repo, "main", "", service.ProjectValidation{
 		TestCommands:      []string{"true"},
 		LintCommands:      []string{"false"},
 		TypecheckCommands: []string{"echo ok"},
@@ -47,7 +47,7 @@ func TestEvidenceCollector_CapturesGitAndCommands(t *testing.T) {
 func TestEvidenceCollector_NoCommandsIsNotPassed(t *testing.T) {
 	ctx := context.Background()
 	repo := initRepo(t)
-	out, err := service.NewEvidenceCollector().Collect(ctx, repo, "main", service.ProjectValidation{})
+	out, err := service.NewEvidenceCollector().Collect(ctx, repo, "main", "", service.ProjectValidation{})
 	require.NoError(t, err)
 	assert.False(t, out.AllValidationPassed(), "empty validation must not be treated as passing")
 }

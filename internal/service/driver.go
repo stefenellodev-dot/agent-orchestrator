@@ -106,13 +106,14 @@ func (o *Orchestrator) executePhase(ctx context.Context, wi *domain.WorkItem) (*
 	})
 
 	res, runErr := o.adapter.Run(ctx, domain.RunRequest{
-		WorktreePath: wi.WorktreePath,
-		BaseBranch:   wi.BaseBranch,
-		Phase:        wi.CurrentPhase,
-		Prompt:       prompt,
-		Agent:        agent,
-		Model:        o.model,
-		Timeout:      o.phaseTimeout,
+		WorktreePath:  wi.WorktreePath,
+		BaseBranch:    wi.BaseBranch,
+		BaseCommitSHA: wi.BaseCommitSHA,
+		Phase:         wi.CurrentPhase,
+		Prompt:        prompt,
+		Agent:         agent,
+		Model:         o.model,
+		Timeout:       o.phaseTimeout,
 	})
 
 	completed := o.now()
@@ -211,14 +212,11 @@ func (o *Orchestrator) approvedPlanFor(ctx context.Context, wi *domain.WorkItem,
 	}
 	var discovery, decision string
 	for _, s := range sessions {
-		if s.Output == nil {
-			continue
-		}
 		switch s.Phase {
 		case domain.PhaseDiscovery:
-			discovery = s.Output.AgentText
+			discovery = phaseText(s)
 		case domain.PhaseDecision:
-			decision = s.Output.AgentText
+			decision = phaseText(s)
 		}
 	}
 	var b strings.Builder
@@ -232,6 +230,18 @@ func (o *Orchestrator) approvedPlanFor(ctx context.Context, wi *domain.WorkItem,
 		b.WriteString(decision)
 	}
 	return b.String()
+}
+
+// phaseText returns a session's agent text, recovering it from stored raw
+// stdout for legacy sessions that predate AgentText extraction.
+func phaseText(s *domain.Session) string {
+	if s == nil || s.Output == nil {
+		return ""
+	}
+	if strings.TrimSpace(s.Output.AgentText) != "" {
+		return s.Output.AgentText
+	}
+	return extractAgentText(s.Output.ValidationOutput)
 }
 
 // createGate opens (or re-opens) the human approval gate after Decision
@@ -318,7 +328,7 @@ func (o *Orchestrator) collectValidationEvidence(ctx context.Context, wi *domain
 	if collector == nil {
 		collector = NewEvidenceCollector()
 	}
-	out, err := collector.Collect(ctx, wi.WorktreePath, wi.BaseBranch, pv)
+	out, err := collector.Collect(ctx, wi.WorktreePath, wi.BaseBranch, wi.BaseCommitSHA, pv)
 	if err != nil {
 		return nil, err
 	}

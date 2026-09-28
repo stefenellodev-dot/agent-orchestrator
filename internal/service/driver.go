@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/stefenello/agent-orchestrator/internal/domain"
 	"github.com/stefenello/agent-orchestrator/internal/store"
@@ -50,6 +51,10 @@ func (o *Orchestrator) Drive(ctx context.Context, id domain.WorkItemID) error {
 			if ok, reason := validationPassed(out, res.ExitCode); !ok {
 				return o.markFailed(ctx, wi, fmt.Errorf("validation failed: %s", reason))
 			}
+		} else if res.ExitCode != 0 {
+			// A failed Discovery/Decision/Implementation must halt the workflow
+			// rather than advance to the gate.
+			return o.markFailed(ctx, wi, fmt.Errorf("%s phase exited %d", phase, res.ExitCode))
 		}
 
 		next := phase.Next()
@@ -137,6 +142,7 @@ func (o *Orchestrator) executePhase(ctx context.Context, wi *domain.WorkItem) (*
 		sess.Status = domain.SessionCompleted
 	} else {
 		sess.Status = domain.SessionFailed
+		sess.Error = strings.TrimSpace(res.Stderr)
 	}
 	if err := o.store.UpdateSession(ctx, sess); err != nil {
 		return nil, err

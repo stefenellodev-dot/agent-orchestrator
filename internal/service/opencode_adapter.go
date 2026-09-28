@@ -77,6 +77,10 @@ func (a *CLIAdapter) Run(ctx context.Context, req domain.RunRequest) (*domain.Ru
 	cmd.Dir = req.WorktreePath
 	cmd.Env = append(os.Environ(), mapToEnv(req.EnvVars)...)
 
+	if os.Getenv("ORCHESTRATOR_DEBUG") != "" {
+		fmt.Fprintf(os.Stderr, "opencode exec: %s %q (dir=%s)\n", a.binary, cmd.Args[1:], cmd.Dir)
+	}
+
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -140,12 +144,12 @@ func (a *CLIAdapter) buildArgs(req domain.RunRequest) []string {
 	return append(args, req.Prompt)
 }
 
+// output runs a probe command and returns combined stdout+stderr. OpenCode
+// writes `run --help` to stderr, so both streams must be captured.
 func (a *CLIAdapter) output(ctx context.Context, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, a.binary, args...)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	err := cmd.Run()
-	return out.String(), err
+	out, err := cmd.CombinedOutput()
+	return string(out), err
 }
 
 func revParse(ctx context.Context, dir string) (string, error) {

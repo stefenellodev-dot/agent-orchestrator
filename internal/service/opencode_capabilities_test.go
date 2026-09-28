@@ -1,9 +1,13 @@
 package service_test
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/stefenello/agent-orchestrator/internal/domain"
 	"github.com/stefenello/agent-orchestrator/internal/service"
@@ -62,4 +66,29 @@ func TestParseCapabilities_UnknownHelpMarksAbsent(t *testing.T) {
 	assert.False(t, caps.SupportsSession)
 	assert.False(t, caps.SupportsDir)
 	assert.Equal(t, "9.9.9", caps.Version)
+}
+
+// Regression: OpenCode writes `run --help` to stderr. The probe must capture
+// stderr (combined output), otherwise every capability is wrongly marked absent
+// and the adapter invokes OpenCode with no flags.
+func TestValidateCLI_ReadsHelpFromStderr(t *testing.T) {
+	dir := t.TempDir()
+	script := `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "1.18.31"; exit 0; fi
+if [ "$1" = "agent" ] && [ "$2" = "list" ]; then echo "build (primary)"; exit 0; fi
+if [ "$1" = "run" ] && [ "$2" = "--help" ]; then
+  printf '%s\n' '--format default or json' '--agent' '--dir' '--model' 1>&2
+  exit 0
+fi
+exit 0
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "opencode"), []byte(script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	caps, err := service.NewCLIAdapter("opencode").ValidateCLI(context.Background())
+	require.NoError(t, err)
+	assert.True(t, caps.SupportsJSON, "help printed to stderr must still be parsed")
+	assert.True(t, caps.SupportsAgent)
+	assert.True(t, caps.SupportsDir)
+	assert.True(t, caps.SupportsModel)
 }

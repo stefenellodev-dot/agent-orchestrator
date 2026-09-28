@@ -63,3 +63,22 @@ func TestCompletion_NoCommandsFallsBackToOpenCodeExit(t *testing.T) {
 	_, bad := driveToTerminal(t, service.ProjectValidation{}, &fakeAdapter{result: domain.RunResult{ExitCode: 1}})
 	assert.Equal(t, domain.PhaseFailed, bad.CurrentPhase)
 }
+
+// Regression: a failed Discovery/Decision must halt the workflow, not advance
+// to the human gate as if the work had been done.
+func TestFailedDiscoveryPhaseHaltsBeforeGate(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	root := t.TempDir()
+	adapter := &fakeAdapter{result: domain.RunResult{ExitCode: 1, Stderr: "provider error"}}
+	orch := service.New(memory.New(), service.NewGitWorktreeManager(root), adapter)
+	orch.SetAutoApprove(true)
+
+	wi, err := orch.CreateWorkItem(ctx, service.CreateWorkItemInput{Project: "p", Title: "t", RepoPath: repo})
+	require.NoError(t, err)
+	_ = orch.Drive(ctx, wi.ID)
+
+	got, err := orch.GetWorkItem(ctx, wi.ID)
+	require.NoError(t, err)
+	assert.Equal(t, domain.PhaseFailed, got.CurrentPhase, "failed discovery must not reach the gate")
+}

@@ -71,14 +71,35 @@ func TestGetWorkItem_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, service.ErrNotFound)
 }
 
+func TestCreateWorkItem_ResolvesRepoPathFromProjectConfig(t *testing.T) {
+	ctx := context.Background()
+	prov := &fakeProvisioner{}
+	svc := service.New(memory.New(), prov, nil)
+	svc.RegisterProject(service.ProjectConfig{
+		Name:       "condosmart",
+		RepoPath:   "/srv/condosmart",
+		BaseBranch: "master",
+	})
+
+	wi, err := svc.CreateWorkItem(ctx, service.CreateWorkItemInput{Project: "condosmart", Title: "t"})
+	require.NoError(t, err)
+	assert.Equal(t, "master", wi.BaseBranch)
+	assert.Equal(t, "/srv/condosmart", prov.lastRepoPath)
+	assert.Equal(t, "master", prov.lastBase)
+}
+
 type fakeProvisioner struct {
 	createCalls  int
 	cleanupCalls int
 	cleaned      bool
+	lastRepoPath string
+	lastBase     string
 }
 
-func (f *fakeProvisioner) Create(_ context.Context, workItemID, _, _ string) (*service.Worktree, error) {
+func (f *fakeProvisioner) Create(_ context.Context, workItemID, repoPath, baseBranch string) (*service.Worktree, error) {
 	f.createCalls++
+	f.lastRepoPath = repoPath
+	f.lastBase = baseBranch
 	return &service.Worktree{WorkItemID: workItemID, Path: "/tmp/wt/" + workItemID}, nil
 }
 

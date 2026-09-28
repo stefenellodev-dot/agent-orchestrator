@@ -102,6 +102,7 @@ func (o *Orchestrator) executePhase(ctx context.Context, wi *domain.WorkItem) (*
 		Phase:        wi.CurrentPhase,
 		Prompt:       prompt,
 		Agent:        agent,
+		Model:        o.model,
 		Timeout:      o.phaseTimeout,
 	})
 

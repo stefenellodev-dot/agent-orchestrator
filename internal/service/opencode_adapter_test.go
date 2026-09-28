@@ -29,7 +29,7 @@ if [ "$1" = "agent" ] && [ "$2" = "list" ]; then
   exit 0
 fi
 if [ "$1" = "run" ] && [ "$2" = "--help" ]; then
-  printf '%s\n' '--format  format: default or json' '--session' '--continue' '--fork' '--agent' '--dir' '--attach'
+  printf '%s\n' '--format  format: default or json' '--session' '--continue' '--fork' '--agent' '--dir' '--attach' '--model'
   exit 0
 fi
 echo "FAKE_RUN_OUTPUT phase=$1"
@@ -93,6 +93,36 @@ func TestRun_NonZeroExit_IsEvidenceNotError(t *testing.T) {
 	})
 	require.NoError(t, err, "a failing command is still a valid result")
 	assert.Equal(t, 3, res.ExitCode)
+}
+
+func TestRun_IncludesOnlyVerifiedFlags(t *testing.T) {
+	dir := t.TempDir()
+	script := `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "1.18.31"; exit 0; fi
+if [ "$1" = "agent" ] && [ "$2" = "list" ]; then echo "build (primary)"; exit 0; fi
+if [ "$1" = "run" ] && [ "$2" = "--help" ]; then
+  printf '%s\n' '--format default or json' '--session' '--continue' '--fork' '--agent' '--dir' '--attach' '--model'
+  exit 0
+fi
+echo "ARGS: $@"
+exit 0
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "opencode"), []byte(script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	repo := initRepo(t)
+	adapter := service.NewCLIAdapter("opencode")
+	res, err := adapter.Run(context.Background(), domain.RunRequest{
+		WorktreePath: repo,
+		Phase:        domain.PhaseDecision,
+		Prompt:       "plan it",
+		Agent:        "plan",
+		Model:        "opencode-go/deepseek-v4-flash",
+	})
+	require.NoError(t, err)
+	assert.Contains(t, res.Stdout, "--agent plan")
+	assert.Contains(t, res.Stdout, "--model opencode-go/deepseek-v4-flash")
+	assert.Contains(t, res.Stdout, "--dir "+repo)
 }
 
 func TestRun_MalformedOutputDoesNotPanic(t *testing.T) {

@@ -15,6 +15,8 @@ type RunRequest struct {
 	Phase         Phase
 	Prompt        string
 	Agent         string
+	// Model is the explicit provider/model. May be empty.
+	Model string
 	// SessionID and Fork are best-effort. MVP correctness must not depend on
 	// session continuity; callers may leave them empty.
 	SessionID string
@@ -52,6 +54,7 @@ type CLICapabilities struct {
 	SupportsAgent    bool
 	SupportsDir      bool
 	SupportsAttach   bool
+	SupportsModel    bool
 	SupportedAgents  []string
 }
 

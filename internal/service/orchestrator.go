@@ -51,9 +51,19 @@ type Orchestrator struct {
 	// production, where the gate pauses the workflow.
 	autoApprove  bool
 	agents       map[domain.Phase]string
+	model        string
 	phaseTimeout time.Duration
 	collector    *EvidenceCollector
-	validations  map[string]ProjectValidation
+	projects     map[string]ProjectConfig
+}
+
+// ProjectConfig is the orchestrator-owned definition of a project. Consumer
+// repositories need no changes; paths and validation commands live here.
+type ProjectConfig struct {
+	Name       string
+	RepoPath   string
+	BaseBranch string
+	Validation ProjectValidation
 }
 
 // New builds an Orchestrator. adapter may be nil; phases that require OpenCode
@@ -72,19 +82,30 @@ func New(s store.Store, wm WorktreeManager, adapter domain.OpenCodeAdapter) *Orc
 		},
 		phaseTimeout: 10 * time.Minute,
 		collector:    NewEvidenceCollector(),
-		validations:  map[string]ProjectValidation{},
+		projects:     map[string]ProjectConfig{},
 	}
 }
 
+// RegisterProject registers (or replaces) a project definition.
+func (o *Orchestrator) RegisterProject(pc ProjectConfig) {
+	o.projects[pc.Name] = pc
+}
+
 // SetProjectValidation registers the objective validation commands for a
-// project. Configuration is orchestrator-owned.
+// project, preserving any existing path configuration.
 func (o *Orchestrator) SetProjectValidation(project string, pv ProjectValidation) {
-	o.validations[project] = pv
+	pc := o.projects[project]
+	pc.Name = project
+	pc.Validation = pv
+	o.projects[project] = pc
 }
 
 func (o *Orchestrator) validationFor(project string) ProjectValidation {
-	return o.validations[project]
+	return o.projects[project].Validation
 }
+
+// SetModel sets the explicit OpenCode provider/model used for all phases.
+func (o *Orchestrator) SetModel(model string) { o.model = model }
 
 // SetAutoDrive enables background workflow execution on WorkItem creation.
 func (o *Orchestrator) SetAutoDrive(v bool) { o.autoDrive = v }
@@ -122,6 +143,16 @@ func (o *Orchestrator) agentFor(phase domain.Phase) string { return o.agents[pha
 func (o *Orchestrator) CreateWorkItem(ctx context.Context, in CreateWorkItemInput) (*domain.WorkItem, error) {
 	if in.Project == "" || in.Title == "" {
 		return nil, fmt.Errorf("%w: project and title are required", ErrInvalidInput)
+	}
+	// Resolve repository location from registered project config when the
+	// caller does not supply it explicitly.
+	if pc, ok := o.projects[in.Project]; ok {
+		if in.RepoPath == "" {
+			in.RepoPath = pc.RepoPath
+		}
+		if in.BaseBranch == "" {
+			in.BaseBranch = pc.BaseBranch
+		}
 	}
 	if in.BaseBranch == "" {
 		in.BaseBranch = "main"

@@ -50,6 +50,7 @@ type WorktreeConfig struct {
 
 type OpenCodeConfig struct {
 	BinaryPath     string        `mapstructure:"binary_path"`
+	Model          string        `mapstructure:"model"`
 	DefaultTimeout time.Duration `mapstructure:"default_timeout"`
 	Agents         AgentsConfig  `mapstructure:"agents"`
 }

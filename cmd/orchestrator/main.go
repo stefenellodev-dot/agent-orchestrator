@@ -84,6 +84,7 @@ func runServe(cfg *config.Config) error {
 	orch.SetAutoDrive(true)
 	orch.SetAutoApprove(cfg.Feature.AutoApproveForTests)
 	orch.SetPhaseTimeout(cfg.OpenCode.DefaultTimeout)
+	orch.SetModel(cfg.OpenCode.Model)
 	orch.SetAgents(
 		cfg.OpenCode.Agents.Discovery,
 		cfg.OpenCode.Agents.Decision,
@@ -94,10 +95,15 @@ func runServe(cfg *config.Config) error {
 		fmt.Fprintln(os.Stderr, "WARNING: auto-approve for tests is ENABLED; the human gate is bypassed")
 	}
 	for _, p := range cfg.Projects {
-		orch.SetProjectValidation(p.Name, service.ProjectValidation{
-			TestCommands:      p.ValidationCmds,
-			LintCommands:      p.LintCmds,
-			TypecheckCommands: p.TypecheckCmds,
+		orch.RegisterProject(service.ProjectConfig{
+			Name:       p.Name,
+			RepoPath:   p.RepoPath,
+			BaseBranch: p.BaseBranch,
+			Validation: service.ProjectValidation{
+				TestCommands:      p.ValidationCmds,
+				LintCommands:      p.LintCmds,
+				TypecheckCommands: p.TypecheckCmds,
+			},
 		})
 	}
 
@@ -197,8 +203,12 @@ func opencodeRunCmd() *cobra.Command {
 			agent, _ := cmd.Flags().GetString("agent")
 			phase, _ := cmd.Flags().GetString("phase")
 			prompt, _ := cmd.Flags().GetString("prompt")
+			model, _ := cmd.Flags().GetString("model")
 			if worktree == "" || prompt == "" {
 				return errors.New("--worktree and --prompt are required")
+			}
+			if model == "" {
+				model = cfg.OpenCode.Model
 			}
 
 			adapter := service.NewCLIAdapter(cfg.OpenCode.BinaryPath)
@@ -209,6 +219,7 @@ func opencodeRunCmd() *cobra.Command {
 				WorktreePath: worktree,
 				Phase:        domain.Phase(phase),
 				Agent:        agent,
+				Model:        model,
 				Prompt:       prompt,
 				Timeout:      cfg.OpenCode.DefaultTimeout,
 			})
@@ -231,6 +242,7 @@ func opencodeRunCmd() *cobra.Command {
 	f.String("agent", "", "OpenCode agent name")
 	f.String("phase", "", "phase name (discovery|decision|implementation|validation)")
 	f.String("prompt", "", "prompt to send (required)")
+	f.String("model", "", "provider/model (defaults to config)")
 	return cmd
 }
 

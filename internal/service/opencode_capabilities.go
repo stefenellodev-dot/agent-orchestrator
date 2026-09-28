@@ -19,6 +19,7 @@ func ParseCapabilities(version, runHelp, agentsOutput string) domain.CLICapabili
 		SupportsAgent:    hasFlag(runHelp, "--agent"),
 		SupportsDir:      hasFlag(runHelp, "--dir"),
 		SupportsAttach:   hasFlag(runHelp, "--attach"),
+		SupportsModel:    hasFlag(runHelp, "--model"),
 	}
 	caps.SupportedAgents = parseAgents(agentsOutput)
 	return caps

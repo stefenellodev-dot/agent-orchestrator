@@ -127,6 +127,9 @@ func (a *CLIAdapter) buildArgs(req domain.RunRequest) []string {
 	if a.caps.SupportsAgent && req.Agent != "" {
 		args = append(args, "--agent", req.Agent)
 	}
+	if a.caps.SupportsModel && req.Model != "" {
+		args = append(args, "--model", req.Model)
+	}
 	// Session continuity is best-effort and never load-bearing.
 	if a.caps.SupportsSession && req.SessionID != "" {
 		args = append(args, "--session", req.SessionID)

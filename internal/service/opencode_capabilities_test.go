@@ -39,6 +39,7 @@ func TestParseCapabilities_RealHelpText(t *testing.T) {
 	assert.True(t, caps.SupportsAgent)
 	assert.True(t, caps.SupportsDir)
 	assert.True(t, caps.SupportsAttach)
+	assert.True(t, caps.SupportsModel)
 	assert.Contains(t, caps.SupportedAgents, "build")
 	assert.Contains(t, caps.SupportedAgents, "explore")
 }

@@ -133,6 +133,12 @@ func runSkeleton(t *testing.T, name string, st store.Store) {
 			return os.IsNotExist(err)
 		}, 5*time.Second, 50*time.Millisecond, "worktree should be cleaned after complete")
 
+		// Wait for the cleanup event so git's asynchronous pruning has finished
+		// before the test's temp directories are removed.
+		require.Eventually(t, func() bool {
+			return hasEvent(fetchEvents(t, srv.URL+"/api/workitems/"+string(created.ID)+"/events"), domain.EventWorktreeCleaned)
+		}, 5*time.Second, 50*time.Millisecond)
+
 		_ = ctx
 	})
 }

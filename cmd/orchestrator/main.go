@@ -89,6 +89,13 @@ func runServe(cfg *config.Config) error {
 	if cfg.Feature.AutoApproveForTests {
 		fmt.Fprintln(os.Stderr, "WARNING: auto-approve for tests is ENABLED; the human gate is bypassed")
 	}
+	for _, p := range cfg.Projects {
+		orch.SetProjectValidation(p.Name, service.ProjectValidation{
+			TestCommands:      p.ValidationCmds,
+			LintCommands:      p.LintCmds,
+			TypecheckCommands: p.TypecheckCmds,
+		})
+	}
 
 	handler := api.NewServer(orch, api.Options{
 		AuthEnabled:  cfg.Auth.Enabled,

@@ -52,6 +52,8 @@ type Orchestrator struct {
 	autoApprove  bool
 	agents       map[domain.Phase]string
 	phaseTimeout time.Duration
+	collector    *EvidenceCollector
+	validations  map[string]ProjectValidation
 }
 
 // New builds an Orchestrator. adapter may be nil; phases that require OpenCode
@@ -69,7 +71,19 @@ func New(s store.Store, wm WorktreeManager, adapter domain.OpenCodeAdapter) *Orc
 			domain.PhaseValidation:     "build",
 		},
 		phaseTimeout: 10 * time.Minute,
+		collector:    NewEvidenceCollector(),
+		validations:  map[string]ProjectValidation{},
 	}
+}
+
+// SetProjectValidation registers the objective validation commands for a
+// project. Configuration is orchestrator-owned.
+func (o *Orchestrator) SetProjectValidation(project string, pv ProjectValidation) {
+	o.validations[project] = pv
+}
+
+func (o *Orchestrator) validationFor(project string) ProjectValidation {
+	return o.validations[project]
 }
 
 // SetAutoDrive enables background workflow execution on WorkItem creation.
@@ -198,6 +212,14 @@ func (o *Orchestrator) ListEvents(ctx context.Context, id domain.WorkItemID) ([]
 		return nil, err
 	}
 	return o.store.ListEvents(ctx, id)
+}
+
+// ListSessions returns the OpenCode executions recorded for a WorkItem.
+func (o *Orchestrator) ListSessions(ctx context.Context, id domain.WorkItemID) ([]*domain.Session, error) {
+	if _, err := o.GetWorkItem(ctx, id); err != nil {
+		return nil, err
+	}
+	return o.store.ListSessions(ctx, id)
 }
 
 func (o *Orchestrator) appendEvent(ctx context.Context, id domain.WorkItemID, t domain.EventType, actor domain.EventActor, payload map[string]any) error {

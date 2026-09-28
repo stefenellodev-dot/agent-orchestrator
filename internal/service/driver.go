@@ -42,8 +42,14 @@ func (o *Orchestrator) Drive(ctx context.Context, id domain.WorkItemID) error {
 			return o.markFailed(ctx, wi, err)
 		}
 
-		if phase == domain.PhaseValidation && res.ExitCode != 0 {
-			return o.markFailed(ctx, wi, fmt.Errorf("validation failed with exit code %d", res.ExitCode))
+		if phase == domain.PhaseValidation {
+			out, err := o.collectValidationEvidence(ctx, wi)
+			if err != nil {
+				return o.markFailed(ctx, wi, err)
+			}
+			if ok, reason := validationPassed(out, res.ExitCode); !ok {
+				return o.markFailed(ctx, wi, fmt.Errorf("validation failed: %s", reason))
+			}
 		}
 
 		next := phase.Next()
@@ -215,6 +221,69 @@ func (o *Orchestrator) grantAuthorization(ctx context.Context, wi *domain.WorkIt
 	_ = o.appendEvent(ctx, wi.ID, domain.EventAuthorizationGranted, domain.ActorHuman, map[string]any{"by": by})
 	_ = o.appendEvent(ctx, wi.ID, domain.EventGateApproved, domain.ActorHuman, map[string]any{"gate_id": string(gate.ID)})
 	return o.AdvanceToImplementation(ctx, wi.ID)
+}
+
+// collectValidationEvidence runs the orchestrator-owned validation commands and
+// persists their objective results onto the validation Session.
+func (o *Orchestrator) collectValidationEvidence(ctx context.Context, wi *domain.WorkItem) (*domain.SessionOutput, error) {
+	pv := o.validationFor(wi.Project)
+	collector := o.collector
+	if collector == nil {
+		collector = NewEvidenceCollector()
+	}
+	out, err := collector.Collect(ctx, wi.WorktreePath, wi.BaseBranch, pv)
+	if err != nil {
+		return nil, err
+	}
+
+	sessions, err := o.store.ListSessions(ctx, wi.ID)
+	if err == nil {
+		for i := len(sessions) - 1; i >= 0; i-- {
+			if sessions[i].Phase != domain.PhaseValidation {
+				continue
+			}
+			sess := sessions[i]
+			if sess.Output == nil {
+				sess.Output = &domain.SessionOutput{}
+			}
+			sess.Output.BaseCommitSHA = out.BaseCommitSHA
+			sess.Output.CommitSHA = out.CommitSHA
+			sess.Output.Diff = out.Diff
+			sess.Output.DiffStat = out.DiffStat
+			sess.Output.TestCommands = out.TestCommands
+			sess.Output.LintCommands = out.LintCommands
+			sess.Output.TypecheckCommands = out.TypecheckCommands
+			_ = o.store.UpdateSession(ctx, sess)
+			break
+		}
+	}
+	return out, nil
+}
+
+// validationPassed reports whether the WorkItem may be marked complete. Only
+// objective command exit codes decide; agent confidence is never consulted.
+func validationPassed(out *domain.SessionOutput, openCodeExit int) (bool, string) {
+	if out == nil {
+		out = &domain.SessionOutput{}
+	}
+	commands := make([]domain.CommandResult, 0, len(out.TestCommands)+len(out.LintCommands)+len(out.TypecheckCommands))
+	commands = append(commands, out.TestCommands...)
+	commands = append(commands, out.LintCommands...)
+	commands = append(commands, out.TypecheckCommands...)
+
+	if len(commands) == 0 {
+		// No objective commands configured: fall back to the OpenCode exit code.
+		if openCodeExit != 0 {
+			return false, fmt.Sprintf("opencode validation exited %d", openCodeExit)
+		}
+		return true, ""
+	}
+	for _, c := range commands {
+		if c.ExitCode != 0 {
+			return false, fmt.Sprintf("command %q exited %d", c.Command, c.ExitCode)
+		}
+	}
+	return true, ""
 }
 
 // markFailed transitions the WorkItem to failed, retaining its worktree.

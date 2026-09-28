@@ -18,6 +18,7 @@ type OrchestratorService interface {
 	GetWorkItem(ctx context.Context, id domain.WorkItemID) (*domain.WorkItem, error)
 	ListWorkItems(ctx context.Context, project string) ([]*domain.WorkItem, error)
 	ListEvents(ctx context.Context, id domain.WorkItemID) ([]*domain.Event, error)
+	ListSessions(ctx context.Context, id domain.WorkItemID) ([]*domain.Session, error)
 
 	GetGate(ctx context.Context, id domain.WorkItemID) (*domain.Gate, error)
 	Approve(ctx context.Context, id domain.WorkItemID, in service.ApprovalInput) error
@@ -61,6 +62,7 @@ func NewServer(svc OrchestratorService, opts Options) http.Handler {
 	api.GET("/workitems", s.listWorkItems)
 	api.GET("/workitems/:id", s.getWorkItem)
 	api.GET("/workitems/:id/events", s.listEvents)
+	api.GET("/workitems/:id/sessions", s.listSessions)
 	api.GET("/workitems/:id/gate", s.getGate)
 	api.POST("/workitems/:id/approve", s.approve)
 	api.POST("/workitems/:id/reject", s.reject)
@@ -116,6 +118,17 @@ func (s *server) listEvents(c echo.Context) error {
 		events = []*domain.Event{}
 	}
 	return c.JSON(http.StatusOK, events)
+}
+
+func (s *server) listSessions(c echo.Context) error {
+	sessions, err := s.svc.ListSessions(c.Request().Context(), domain.WorkItemID(c.Param("id")))
+	if err != nil {
+		return apiError(c, err)
+	}
+	if sessions == nil {
+		sessions = []*domain.Session{}
+	}
+	return c.JSON(http.StatusOK, sessions)
 }
 
 func (s *server) getGate(c echo.Context) error {

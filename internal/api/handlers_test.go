@@ -100,6 +100,13 @@ func (s *stubService) ListEvents(_ context.Context, id domain.WorkItemID) ([]*do
 	return s.events[id], nil
 }
 
+func (s *stubService) ListSessions(_ context.Context, id domain.WorkItemID) ([]*domain.Session, error) {
+	if _, ok := s.items[id]; !ok {
+		return nil, service.ErrNotFound
+	}
+	return []*domain.Session{}, nil
+}
+
 var _ api.OrchestratorService = (*stubService)(nil)
 var _ = store.ErrNotFound
 

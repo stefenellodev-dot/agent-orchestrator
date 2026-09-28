@@ -123,3 +123,17 @@ agent-orchestrator.service`.
 Provider credentials come from the bind-mounted
 `~/.local/share/opencode/auth.json`. No secrets are written into worktrees or
 into consumer repositories.
+
+Basic-Auth credentials for the dashboard/API can be supplied from the
+environment (systemd `EnvironmentFile`), so the real password never lives in
+Git. Environment overrides the YAML; an empty variable falls back to the YAML:
+
+```
+# ~/.config/agent-orchestrator/secrets.env  (chmod 600, NOT in Git)
+ORCHESTRATOR_AUTH_USERNAME=stefenello
+ORCHESTRATOR_AUTH_PASSWORD=<set by the administrator>
+```
+
+Recognized overrides: `ORCHESTRATOR_AUTH_USERNAME`, `ORCHESTRATOR_AUTH_PASSWORD`,
+`ORCHESTRATOR_AUTH_ENABLED`. The example config keeps only clearly-documented
+development credentials (`admin` / `changeme`).

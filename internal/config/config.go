@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -95,6 +97,8 @@ func Load(path string) (*Config, error) {
 	v.SetConfigFile(path)
 	v.SetConfigType("yaml")
 	v.SetEnvPrefix("ORCHESTRATOR")
+	// Map dotted keys to underscore env names (auth.username -> AUTH_USERNAME).
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
 	setDefaults(v)
@@ -107,7 +111,24 @@ func Load(path string) (*Config, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, err
 	}
+	applyEnvOverrides(&cfg)
 	return &cfg, nil
+}
+
+// applyEnvOverrides lets a small, explicit set of settings be supplied from the
+// environment (e.g. systemd EnvironmentFile), overriding the YAML. This is used
+// for credentials so real secrets can live outside Git. Environment wins only
+// when the variable is present and non-empty; the YAML remains the fallback.
+func applyEnvOverrides(cfg *Config) {
+	if v, ok := os.LookupEnv("ORCHESTRATOR_AUTH_USERNAME"); ok && v != "" {
+		cfg.Auth.Username = v
+	}
+	if v, ok := os.LookupEnv("ORCHESTRATOR_AUTH_PASSWORD"); ok && v != "" {
+		cfg.Auth.Password = v
+	}
+	if v, ok := os.LookupEnv("ORCHESTRATOR_AUTH_ENABLED"); ok && v != "" {
+		cfg.Auth.Enabled = v == "true" || v == "1"
+	}
 }
 
 func setDefaults(v *viper.Viper) {

@@ -18,6 +18,11 @@ type OrchestratorService interface {
 	GetWorkItem(ctx context.Context, id domain.WorkItemID) (*domain.WorkItem, error)
 	ListWorkItems(ctx context.Context, project string) ([]*domain.WorkItem, error)
 	ListEvents(ctx context.Context, id domain.WorkItemID) ([]*domain.Event, error)
+
+	GetGate(ctx context.Context, id domain.WorkItemID) (*domain.Gate, error)
+	Approve(ctx context.Context, id domain.WorkItemID, in service.ApprovalInput) error
+	Reject(ctx context.Context, id domain.WorkItemID, in service.ApprovalInput) error
+	RequestChanges(ctx context.Context, id domain.WorkItemID, in service.ApprovalInput) error
 }
 
 // Options configures the HTTP server.
@@ -56,6 +61,10 @@ func NewServer(svc OrchestratorService, opts Options) http.Handler {
 	api.GET("/workitems", s.listWorkItems)
 	api.GET("/workitems/:id", s.getWorkItem)
 	api.GET("/workitems/:id/events", s.listEvents)
+	api.GET("/workitems/:id/gate", s.getGate)
+	api.POST("/workitems/:id/approve", s.approve)
+	api.POST("/workitems/:id/reject", s.reject)
+	api.POST("/workitems/:id/request-changes", s.requestChanges)
 
 	if opts.StaticDir != "" {
 		e.Static("/", opts.StaticDir)
@@ -107,6 +116,31 @@ func (s *server) listEvents(c echo.Context) error {
 		events = []*domain.Event{}
 	}
 	return c.JSON(http.StatusOK, events)
+}
+
+func (s *server) getGate(c echo.Context) error {
+	gate, err := s.svc.GetGate(c.Request().Context(), domain.WorkItemID(c.Param("id")))
+	if err != nil {
+		return apiError(c, err)
+	}
+	return c.JSON(http.StatusOK, gate)
+}
+
+func (s *server) approve(c echo.Context) error { return s.decide(c, s.svc.Approve) }
+
+func (s *server) reject(c echo.Context) error { return s.decide(c, s.svc.Reject) }
+
+func (s *server) requestChanges(c echo.Context) error { return s.decide(c, s.svc.RequestChanges) }
+
+func (s *server) decide(c echo.Context, fn func(context.Context, domain.WorkItemID, service.ApprovalInput) error) error {
+	var req approvalRequest
+	if err := c.Bind(&req); err != nil {
+		return apiError(c, service.ErrInvalidInput)
+	}
+	if err := fn(c.Request().Context(), domain.WorkItemID(c.Param("id")), req.toInput()); err != nil {
+		return apiError(c, err)
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // apiError maps domain/service errors to HTTP status codes.

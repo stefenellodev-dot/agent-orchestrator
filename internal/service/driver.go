@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/stefenello/agent-orchestrator/internal/domain"
+	"github.com/stefenello/agent-orchestrator/internal/store"
 )
 
 // Drive runs the WorkItem workflow until it reaches a terminal phase or stops
@@ -140,26 +141,52 @@ func (o *Orchestrator) executePhase(ctx context.Context, wi *domain.WorkItem) (*
 	return res, nil
 }
 
-// createGate opens the human approval gate after Decision completes.
+// createGate opens (or re-opens) the human approval gate after Decision
+// completes. On re-planning the existing gate is reset rather than duplicated.
 func (o *Orchestrator) createGate(ctx context.Context, wi *domain.WorkItem, res *domain.RunResult) error {
-	gate := &domain.Gate{
-		ID:         domain.NewGateID(),
-		WorkItemID: wi.ID,
-		Phase:      domain.PhaseAwaitingApproval,
-		Status:     domain.GatePending,
-		CreatedAt:  o.now(),
-		Payload: domain.GatePayload{
-			DiffPreview:    res.Diff,
-			Evidence:       []domain.EvidenceRef{{Type: "decision", Summary: "decision phase output"}},
-			RiskAssessment: domain.RiskMedium,
-		},
+	payload := domain.GatePayload{
+		DiffPreview:    res.Diff,
+		Evidence:       []domain.EvidenceRef{{Type: "decision", Summary: "decision phase output"}},
+		RiskAssessment: domain.RiskMedium,
 	}
-	if err := o.store.CreateGate(ctx, gate); err != nil {
+
+	existing, err := o.store.GetGateByWorkItem(ctx, wi.ID)
+	switch {
+	case err == nil:
+		existing.Status = domain.GatePending
+		existing.Payload = payload
+		existing.Approvals = nil
+		existing.ResolvedAt = nil
+		if err := o.store.UpdateGate(ctx, existing); err != nil {
+			return err
+		}
+		if err := o.appendEvent(ctx, wi.ID, domain.EventGateCreated, domain.ActorSystem, map[string]any{
+			"gate_id":  string(existing.ID),
+			"reopened": true,
+		}); err != nil {
+			return err
+		}
+	case errors.Is(err, store.ErrNotFound):
+		gate := &domain.Gate{
+			ID:         domain.NewGateID(),
+			WorkItemID: wi.ID,
+			Phase:      domain.PhaseAwaitingApproval,
+			Status:     domain.GatePending,
+			CreatedAt:  o.now(),
+			Payload:    payload,
+		}
+		if err := o.store.CreateGate(ctx, gate); err != nil {
+			return err
+		}
+		if err := o.appendEvent(ctx, wi.ID, domain.EventGateCreated, domain.ActorSystem, map[string]any{
+			"gate_id": string(gate.ID),
+		}); err != nil {
+			return err
+		}
+	default:
 		return err
 	}
-	return o.appendEvent(ctx, wi.ID, domain.EventGateCreated, domain.ActorSystem, map[string]any{
-		"gate_id": string(gate.ID),
-	})
+	return nil
 }
 
 // grantAuthorization records IMPLEMENTATION=AUTHORIZED and advances to
@@ -187,7 +214,7 @@ func (o *Orchestrator) grantAuthorization(ctx context.Context, wi *domain.WorkIt
 	}
 	_ = o.appendEvent(ctx, wi.ID, domain.EventAuthorizationGranted, domain.ActorHuman, map[string]any{"by": by})
 	_ = o.appendEvent(ctx, wi.ID, domain.EventGateApproved, domain.ActorHuman, map[string]any{"gate_id": string(gate.ID)})
-	return o.updatePhase(ctx, wi, domain.PhaseImplementation)
+	return o.AdvanceToImplementation(ctx, wi.ID)
 }
 
 // markFailed transitions the WorkItem to failed, retaining its worktree.

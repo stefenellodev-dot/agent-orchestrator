@@ -39,3 +39,16 @@ func domainPriority(p string) domain.Priority {
 		return ""
 	}
 }
+
+type approvalRequest struct {
+	User    string `json:"user"`
+	Comment string `json:"comment"`
+}
+
+func (r approvalRequest) toInput() service.ApprovalInput {
+	user := r.User
+	if user == "" {
+		user = "unknown"
+	}
+	return service.ApprovalInput{User: user, Comment: r.Comment}
+}

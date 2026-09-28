@@ -18,15 +18,41 @@ import (
 )
 
 type stubService struct {
-	items  map[domain.WorkItemID]*domain.WorkItem
-	events map[domain.WorkItemID][]*domain.Event
+	items        map[domain.WorkItemID]*domain.WorkItem
+	events       map[domain.WorkItemID][]*domain.Event
+	gates        map[domain.WorkItemID]*domain.Gate
+	lastApproval service.ApprovalInput
 }
 
 func newStubService() *stubService {
 	return &stubService{
 		items:  map[domain.WorkItemID]*domain.WorkItem{},
 		events: map[domain.WorkItemID][]*domain.Event{},
+		gates:  map[domain.WorkItemID]*domain.Gate{},
 	}
+}
+
+func (s *stubService) GetGate(_ context.Context, id domain.WorkItemID) (*domain.Gate, error) {
+	g, ok := s.gates[id]
+	if !ok {
+		return nil, service.ErrNotFound
+	}
+	return g, nil
+}
+
+func (s *stubService) Approve(_ context.Context, _ domain.WorkItemID, in service.ApprovalInput) error {
+	s.lastApproval = in
+	return nil
+}
+
+func (s *stubService) Reject(_ context.Context, _ domain.WorkItemID, in service.ApprovalInput) error {
+	s.lastApproval = in
+	return nil
+}
+
+func (s *stubService) RequestChanges(_ context.Context, _ domain.WorkItemID, in service.ApprovalInput) error {
+	s.lastApproval = in
+	return nil
 }
 
 func (s *stubService) CreateWorkItem(_ context.Context, in service.CreateWorkItemInput) (*domain.WorkItem, error) {

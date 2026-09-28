@@ -12,10 +12,12 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stefenello/agent-orchestrator/internal/api"
 	"github.com/stefenello/agent-orchestrator/internal/config"
 	"github.com/stefenello/agent-orchestrator/internal/service"
 	"github.com/stefenello/agent-orchestrator/internal/store/memory"
+	"github.com/stefenello/agent-orchestrator/internal/store/postgres"
 )
 
 var version = "dev"
@@ -140,6 +142,28 @@ func migrateCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "migrate",
 		Short: "Apply database migrations",
-		RunE:  func(cmd *cobra.Command, args []string) error { return errors.New("not implemented") },
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load(configPath(cmd))
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+			if cfg.Database.DSN == "" {
+				return errors.New("database.dsn is required")
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			pool, err := pgxpool.New(ctx, cfg.Database.DSN)
+			if err != nil {
+				return fmt.Errorf("connect database: %w", err)
+			}
+			defer pool.Close()
+
+			if err := postgres.Migrate(ctx, pool); err != nil {
+				return fmt.Errorf("migrate: %w", err)
+			}
+			fmt.Fprintln(os.Stderr, "migrations applied")
+			return nil
+		},
 	}
 }

@@ -1,11 +1,20 @@
 package service
 
-import "context"
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+)
 
 // Worktree describes a provisioned Git worktree for a WorkItem.
 type Worktree struct {
 	WorkItemID string
 	Path       string
+	Branch     string
 	BaseBranch string
 }
 
@@ -20,4 +29,131 @@ type WorktreeManager interface {
 	Cleanup(ctx context.Context, workItemID string) error
 	// Path returns the on-disk path for a WorkItem without creating anything.
 	Path(workItemID string) string
+}
+
+// GitWorktreeManager provisions one Git worktree per WorkItem under a root
+// directory and reuses it for the WorkItem's entire lifecycle.
+type GitWorktreeManager struct {
+	root string
+}
+
+func NewGitWorktreeManager(root string) *GitWorktreeManager {
+	return &GitWorktreeManager{root: root}
+}
+
+// Path returns the deterministic on-disk location for a WorkItem's worktree.
+func (m *GitWorktreeManager) Path(workItemID string) string {
+	return filepath.Join(m.root, workItemID)
+}
+
+// Create provisions the WorkItem's worktree if it does not already exist.
+// It is idempotent: repeated calls return the same worktree.
+func (m *GitWorktreeManager) Create(ctx context.Context, workItemID, repoPath, baseBranch string) (*Worktree, error) {
+	if workItemID == "" {
+		return nil, fmt.Errorf("workItemID is required")
+	}
+	if repoPath == "" {
+		return nil, fmt.Errorf("repoPath is required")
+	}
+	if baseBranch == "" {
+		baseBranch = "main"
+	}
+
+	path := m.Path(workItemID)
+	wt := &Worktree{WorkItemID: workItemID, Path: path, Branch: branchNameFor(workItemID), BaseBranch: baseBranch}
+
+	if isWorktree(path) {
+		return wt, nil
+	}
+
+	if err := os.MkdirAll(m.root, 0o755); err != nil {
+		return nil, fmt.Errorf("create worktree root: %w", err)
+	}
+	// Clear any stale git metadata for worktrees whose directories are gone.
+	_, _ = runGitCommand(ctx, repoPath, "worktree", "prune")
+
+	branch := branchNameFor(workItemID)
+	var err error
+	if branchExists(ctx, repoPath, branch) {
+		_, err = runGitCommand(ctx, repoPath, "worktree", "add", path, branch)
+	} else {
+		_, err = runGitCommand(ctx, repoPath, "worktree", "add", "-b", branch, path, baseBranch)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("git worktree add: %w", err)
+	}
+	if !isWorktree(path) {
+		return nil, fmt.Errorf("worktree at %s was not created correctly", path)
+	}
+	return wt, nil
+}
+
+// Cleanup removes the WorkItem's worktree. Missing worktrees are not an error.
+func (m *GitWorktreeManager) Cleanup(ctx context.Context, workItemID string) error {
+	path := m.Path(workItemID)
+	if !isWorktree(path) {
+		// Nothing of ours to remove. Prune metadata if the directory is gone.
+		return nil
+	}
+	repo, err := mainRepoFor(path)
+	if err != nil {
+		return fmt.Errorf("resolve main repo for %s: %w", path, err)
+	}
+	if _, err := runGitCommand(ctx, repo, "worktree", "remove", "--force", path); err != nil {
+		return fmt.Errorf("git worktree remove: %w", err)
+	}
+	// Best-effort: drop the WorkItem's dedicated branch.
+	_, _ = runGitCommand(ctx, repo, "branch", "-D", branchNameFor(workItemID))
+	_, _ = runGitCommand(ctx, repo, "worktree", "prune")
+	return nil
+}
+
+const worktreeBranchPrefix = "workitem/"
+
+func branchNameFor(workItemID string) string {
+	return worktreeBranchPrefix + workItemID
+}
+
+func branchExists(ctx context.Context, repoPath, branch string) bool {
+	_, err := runGitCommand(ctx, repoPath, "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
+	return err == nil
+}
+
+func runGitCommand(ctx context.Context, dir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = dir
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return stdout.String(), fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return stdout.String(), nil
+}
+
+// isWorktree reports whether path exists and is a linked git worktree (its
+// .git is a file pointing at the main repository).
+func isWorktree(path string) bool {
+	info, err := os.Stat(filepath.Join(path, ".git"))
+	if err != nil {
+		return false
+	}
+	return !info.IsDir()
+}
+
+// mainRepoFor derives the main repository path from a linked worktree by
+// reading its .git file: "gitdir: <main>/.git/worktrees/<name>".
+func mainRepoFor(worktreePath string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(worktreePath, ".git"))
+	if err != nil {
+		return "", err
+	}
+	line := strings.TrimSpace(string(data))
+	const prefix = "gitdir:"
+	if !strings.HasPrefix(line, prefix) {
+		return "", fmt.Errorf("unexpected .git file contents: %q", line)
+	}
+	gitdir := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+	// <main>/.git/worktrees/<name> -> <main>
+	return filepath.Dir(filepath.Dir(filepath.Dir(gitdir))), nil
 }

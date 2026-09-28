@@ -125,6 +125,33 @@ func TestStore_GateWithAuthorization(t *testing.T) {
 	assert.Equal(t, domain.RiskLow, got.Payload.RiskAssessment)
 }
 
+func TestStore_ConcurrencyGuard(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	mk := func(project string) *domain.WorkItem {
+		return &domain.WorkItem{
+			ID: domain.NewWorkItemID(), Project: project, Title: "t",
+			Status: domain.PhaseDiscovery, CurrentPhase: domain.PhaseDiscovery,
+			CreatedAt: now, UpdatedAt: now,
+		}
+	}
+
+	require.NoError(t, st.CreateWorkItem(ctx, mk("p")))
+	assert.ErrorIs(t, st.CreateWorkItem(ctx, mk("p")), store.ErrProjectBusy)
+
+	// Terminal state releases the slot.
+	first, err := st.ListWorkItems(ctx, "p")
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+	first[0].Status = domain.PhaseComplete
+	first[0].CurrentPhase = domain.PhaseComplete
+	require.NoError(t, st.UpdateWorkItem(ctx, first[0]))
+
+	require.NoError(t, st.CreateWorkItem(ctx, mk("p")), "completed WorkItem should free the project slot")
+}
+
 func TestStore_EventsOrderedAndNotFound(t *testing.T) {
 	ctx := context.Background()
 	st := newStore(t)

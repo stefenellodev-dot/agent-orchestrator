@@ -142,6 +142,12 @@ func (o *Orchestrator) CreateWorkItem(ctx context.Context, in CreateWorkItemInpu
 	wi.WorktreePath = wt.Path
 
 	if err := o.store.CreateWorkItem(ctx, wi); err != nil {
+		// The store rejected the WorkItem (e.g. project concurrency limit);
+		// reclaim the worktree we provisioned so it is not orphaned.
+		_ = o.worktrees.Cleanup(ctx, string(wi.ID))
+		if errors.Is(err, store.ErrProjectBusy) {
+			return nil, ErrProjectBusy
+		}
 		return nil, err
 	}
 	if err := o.appendEvent(ctx, wi.ID, domain.EventWorkItemCreated, domain.ActorHuman, map[string]any{

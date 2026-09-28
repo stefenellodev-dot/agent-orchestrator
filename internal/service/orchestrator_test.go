@@ -72,8 +72,9 @@ func TestGetWorkItem_NotFound(t *testing.T) {
 }
 
 type fakeProvisioner struct {
-	createCalls int
-	cleaned     bool
+	createCalls  int
+	cleanupCalls int
+	cleaned      bool
 }
 
 func (f *fakeProvisioner) Create(_ context.Context, workItemID, _, _ string) (*service.Worktree, error) {
@@ -82,6 +83,7 @@ func (f *fakeProvisioner) Create(_ context.Context, workItemID, _, _ string) (*s
 }
 
 func (f *fakeProvisioner) Cleanup(_ context.Context, _ string) error {
+	f.cleanupCalls++
 	f.cleaned = true
 	return nil
 }

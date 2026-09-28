@@ -28,13 +28,13 @@ func TestStore_WorkItemRoundTrip(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
 	wi := &domain.WorkItem{
-		ID:           domain.NewWorkItemID(),
-		Project:      "p",
-		Title:        "t",
-		Description:  "d",
-		Priority:     domain.PriorityHigh,
-		Status:       domain.PhaseDiscovery,
-		CurrentPhase: domain.PhaseDiscovery,
+		ID:            domain.NewWorkItemID(),
+		Project:       "p",
+		Title:         "t",
+		Description:   "d",
+		Priority:      domain.PriorityHigh,
+		Status:        domain.PhaseDiscovery,
+		CurrentPhase:  domain.PhaseDiscovery,
 		WorktreePath:  "/wt/WI-1",
 		BaseBranch:    "main",
 		BaseCommitSHA: "deadbeefcafe",

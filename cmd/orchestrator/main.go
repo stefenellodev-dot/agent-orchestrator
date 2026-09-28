@@ -39,6 +39,7 @@ func main() {
 	rootCmd.AddCommand(webCmd())
 	rootCmd.AddCommand(opencodeRunCmd())
 	rootCmd.AddCommand(migrateCmd())
+	rootCmd.AddCommand(versionCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -49,6 +50,23 @@ func main() {
 func configPath(cmd *cobra.Command) string {
 	p, _ := cmd.Flags().GetString("config")
 	return p
+}
+
+// versionCmd prints the full build identity, including the exact Git commit, so
+// a downloaded or running artifact can be verified before/after deployment.
+func versionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print build identity (version, commit, build time)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out, err := json.MarshalIndent(buildinfo.Current(), "", "  ")
+			if err != nil {
+				return err
+			}
+			fmt.Println(string(out))
+			return nil
+		},
+	}
 }
 
 func serveCmd() *cobra.Command {

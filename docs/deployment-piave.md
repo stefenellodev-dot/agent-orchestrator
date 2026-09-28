@@ -1,6 +1,7 @@
-# Piave Deployment (Podman + Quadlet + systemd, rootless)
+# Piave Deployment (Podman + Quadlet + systemd, rootless) — GitOps by SHA
 
-Deployed and verified 2026-09-28. No Kubernetes, no broker, no managed infra.
+Deployed and verified 2026-09-28. **GitHub is the source of truth.** No Kubernetes,
+no broker, no scp/rsync from a developer machine.
 
 ## Topology
 
@@ -16,52 +17,82 @@ Deployed and verified 2026-09-28. No Kubernetes, no broker, no managed infra.
   └────────────────────────────────────────────────────────────────────┘
 ```
 
-## Layout on Piave
+## Piave layout
 
 ```
-~/agent-orchestrator/
-  bin/orchestrator        # cross-compiled linux/amd64 binary
-  Containerfile           # builds localhost/agent-orchestrator:latest
-~/.config/agent-orchestrator/
-  orchestrator.yaml       # config (projects, DSN, agents, model)
-  secrets.env             # 0600
-~/.local/share/agent-orchestrator/
-  worktrees/              # one worktree per WorkItem
-  repos/                  # orchestrator-accessible repositories
-~/.config/containers/systemd/
+~/agent-orchestrator-src/        # deployment checkout (source of truth: GitHub)
+~/.config/agent-orchestrator/    # orchestrator.yaml + secrets.env (operator-managed)
+~/.local/share/agent-orchestrator/{worktrees,repos}
+~/podman-data/agent-orchestrator-postgres/
+~/.config/containers/systemd/    # Quadlet units (installed from the checkout)
   agent-orchestrator-net.network
   agent-orchestrator-postgres.container
   agent-orchestrator.container
 ```
 
-## Deploy / update
+Note: the environment config (`orchestrator.yaml`, `secrets.env`) is
+operator-managed and intentionally **not** in Git (it holds host paths and
+secrets). Everything else — code, Containerfile, Quadlet units, deploy script —
+comes from the repository.
+
+## Development → commit → push (Mac)
 
 ```bash
-# On macOS: build linux binary with identity
-make build-linux
-scp bin/orchestrator-linux-amd64 piave:~/agent-orchestrator/bin/orchestrator
-
-# On Piave
-ssh piave
-cd ~/agent-orchestrator && podman build -t localhost/agent-orchestrator:latest .
-systemctl --user daemon-reload
-systemctl --user restart agent-orchestrator.service
+make build            # local build
+ORCHESTRATOR_TEST_DSN=... go test -race -count=1 ./...
+go vet ./...
+git add -A && git commit -m "..."
+git push origin main  # HTTPS via gh credential helper
 ```
 
-## Operations
+Record the pushed SHA (`git rev-parse HEAD`).
+
+## Deploy an exact SHA (Piave)
 
 ```bash
+ssh piave
+~/agent-orchestrator-src/scripts/deploy.sh <SHA>
+```
+
+What it does (fails fast on any error):
+1. `git fetch` from GitHub and **verify the SHA exists**.
+2. `git checkout --detach <SHA>` (exact commit, `git clean -fdx`).
+3. Build the binary in a Go container with `-ldflags` pinning `Version`/`Commit`=SHA/`BuildTime`.
+4. Build the runtime image `localhost/agent-orchestrator:latest`.
+5. Install the Quadlet units from the checkout.
+6. `systemctl --user daemon-reload` + `restart agent-orchestrator.service`.
+7. Poll `/healthz` until the reported `commit` **equals the requested SHA**.
+
+It never `git pull`s a moving branch and never copies files from a developer
+machine.
+
+## Validate
+
+```bash
+curl -s -u admin:secret http://127.0.0.1:18080/healthz
+# { "version": ..., "commit": "<SHA>", "build_time": ..., "opencode": "1.15.12" }
 systemctl --user status agent-orchestrator.service
 systemctl --user status agent-orchestrator-postgres.service
-journalctl --user -u agent-orchestrator.service -f
-curl -s -u admin:secret http://127.0.0.1:18080/healthz   # exposes build identity
-podman ps --filter name=agent-orchestrator
+journalctl --user -u agent-orchestrator.service -n 30
 ```
+
+## Rollback
+
+Rollback is just a deployment of a previous SHA — no source edits required:
+
+```bash
+~/agent-orchestrator-src/scripts/deploy.sh <previous-SHA-or-tag>
+```
+
+Because every image is tagged and the deploy rebuilds from the exact commit,
+selecting an older SHA restores that exact build. PostgreSQL data is never
+touched by a rollback (`agent-orchestrator-postgres` is not restarted).
 
 ## Persistence
 
 PostgreSQL data lives in `~/podman-data/agent-orchestrator-postgres`. WorkItem
-state, sessions, gates and events survive `systemctl --user restart`.
+state, sessions, gates and events survive `systemctl --user restart
+agent-orchestrator.service`.
 
 ## Identity guarantee
 
@@ -70,6 +101,6 @@ state, sessions, gates and events survive `systemctl --user restart`.
 
 ## Secrets
 
-Provider credentials are supplied via the bind-mounted
-`~/.local/share/opencode/auth.json` (`:rw` for session state). No secrets are
-written into worktrees or consumer repositories.
+Provider credentials come from the bind-mounted
+`~/.local/share/opencode/auth.json`. No secrets are written into worktrees or
+into consumer repositories.

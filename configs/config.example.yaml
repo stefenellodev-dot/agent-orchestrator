@@ -19,9 +19,10 @@ worktree:
 
 opencode:
   binary_path: "opencode"
-  default_timeout: "10m"
+  model: "opencode-go/deepseek-v4-flash"
+  default_timeout: "20m"
   agents:
-    discovery: "explore"
+    discovery: "plan"
     decision: "plan"
     implementation: "build"
     validation: "build"
@@ -43,11 +44,26 @@ feature:
   # Test-only escape hatch. MUST stay false in production.
   auto_approve_for_tests: false
 
-# Orchestrator-owned project definitions. Consumer repos need no changes.
-projects: []
-#  - name: "condosmart"
-#    repo_path: "/srv/repos/condosmart"
-#    base_branch: "main"
-#    validation_commands: ["npm test"]
-#    lint_commands: ["npm run lint"]
-#    typecheck_commands: ["npm run typecheck"]
+# Orchestrator-owned project definitions. Consumer repositories need no changes
+# and no agent/plugin is ever installed inside them.
+projects:
+  - name: "condosmart"
+    repo_path: "/Users/stefenello/development/movil"
+    base_branch: "master"
+    validation_commands:
+      - "test -f docs/features/notificaciones-i18n.md"
+      - "if git diff --name-only $(git merge-base master HEAD)..HEAD | grep -q '[.]dart$'; then echo unexpected-dart-source-change; exit 1; fi"
+    lint_commands:
+      - "git diff --check $(git merge-base master HEAD)..HEAD"
+  - name: "agent-orchestrator"
+    repo_path: "/Users/stefenello/development/agent-orchestrator"
+    base_branch: "main"
+    validation_commands:
+      - "go build ./..."
+    lint_commands:
+      - "go vet ./..."
+  - name: "fin-engine-v1"
+    repo_path: "/Users/stefenello/development/fin-engine-desa"
+    base_branch: "qa"
+    validation_commands: []
+    lint_commands: []

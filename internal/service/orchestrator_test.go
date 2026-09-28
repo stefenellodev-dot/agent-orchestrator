@@ -88,6 +88,37 @@ func TestCreateWorkItem_ResolvesRepoPathFromProjectConfig(t *testing.T) {
 	assert.Equal(t, "master", prov.lastBase)
 }
 
+// Phase 3/4 regression: every registered project resolves its own repository
+// and base branch without special-casing the orchestrator's own repository.
+func TestRegisterProject_AllProjectsResolveIndependently(t *testing.T) {
+	ctx := context.Background()
+	svc := service.New(memory.New(), &fakeProvisioner{}, nil)
+	projects := []service.ProjectConfig{
+		{Name: "condosmart", RepoPath: "/repos/movil", BaseBranch: "master"},
+		{Name: "agent-orchestrator", RepoPath: "/repos/agent-orchestrator", BaseBranch: "main"},
+		{Name: "fin-engine-v1", RepoPath: "/repos/fin-engine-desa", BaseBranch: "qa"},
+	}
+	for _, pc := range projects {
+		svc.RegisterProject(pc)
+	}
+
+	listed := svc.ProjectList()
+	require.Len(t, listed, 3)
+	assert.Equal(t, "agent-orchestrator", listed[0].Name) // sorted
+
+	for _, pc := range projects {
+		prov := &fakeProvisioner{}
+		svcWithProv := service.New(memory.New(), prov, nil)
+		for _, p := range projects {
+			svcWithProv.RegisterProject(p)
+		}
+		wi, err := svcWithProv.CreateWorkItem(ctx, service.CreateWorkItemInput{Project: pc.Name, Title: "t"})
+		require.NoError(t, err)
+		assert.Equal(t, pc.BaseBranch, wi.BaseBranch)
+		assert.Equal(t, pc.RepoPath, prov.lastRepoPath)
+	}
+}
+
 type fakeProvisioner struct {
 	createCalls  int
 	cleanupCalls int

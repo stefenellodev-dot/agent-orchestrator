@@ -1,0 +1,34 @@
+# Quadlet container template for an OpenCode phase worker.
+#
+# Install to /etc/containers/systemd/opencode-worker@.container on Piave.
+# The orchestrator launches one instance per phase, e.g.:
+#
+#   systemd-run --user --unit=opencode-WI-123-implementation \
+#     --property=Environment=OPENCODE_PHASE=implementation \
+#     --property=Environment=OPENCODE_AGENT=build \
+#     --property=Environment=OPENCODE_PROMPT="Implement the approved plan..." \
+#     systemctl --user start opencode-worker@WI-123.service
+#
+# NOTE: exact launch mechanics depend on the verified Piave environment
+# (see docs/piave-environment.md). This template is PENDING verification.
+
+[Unit]
+Description=OpenCode phase worker for WorkItem %i
+After=network-online.target
+
+[Container]
+Image=ghcr.io/opencode/opencode:latest
+ContainerName=opencode-worker-%i
+# Mount the whole worktrees root; the WorkItem's single worktree is %i.
+Volume=/var/lib/agent-orchestrator/worktrees:/worktrees:Z
+WorkingDir=/worktrees/%i
+EnvironmentFile=/etc/agent-orchestrator/secrets.env
+# Model/agent/phase prompt are injected via Environment by the orchestrator.
+Exec=run --dir /worktrees/%i --agent ${OPENCODE_AGENT} ${OPENCODE_PROMPT}
+# No secrets are ever written into the worktree; they arrive as env vars only.
+
+[Service]
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target

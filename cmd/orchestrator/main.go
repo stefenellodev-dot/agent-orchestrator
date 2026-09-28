@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/stefenello/agent-orchestrator/internal/api"
 	"github.com/stefenello/agent-orchestrator/internal/config"
+	"github.com/stefenello/agent-orchestrator/internal/domain"
 	"github.com/stefenello/agent-orchestrator/internal/service"
 	"github.com/stefenello/agent-orchestrator/internal/store"
 	"github.com/stefenello/agent-orchestrator/internal/store/memory"
@@ -180,11 +182,56 @@ func buildStore(ctx context.Context, cfg *config.Config) (store.Store, func(), e
 }
 
 func opencodeRunCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "opencode-run",
-		Short: "Run a single OpenCode phase (invoked by systemd/Quadlet)",
-		RunE:  func(cmd *cobra.Command, args []string) error { return errors.New("not implemented") },
+		Short: "Run a single OpenCode phase in a worktree (worker entrypoint)",
+		Long: "Runs exactly one OpenCode phase against the WorkItem's worktree using only\n" +
+			"verified CLI capabilities. Prints the objective RunResult as JSON and exits\n" +
+			"with the OpenCode process's exit code. Used by the Piave systemd/Quadlet worker.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load(configPath(cmd))
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+			worktree, _ := cmd.Flags().GetString("worktree")
+			agent, _ := cmd.Flags().GetString("agent")
+			phase, _ := cmd.Flags().GetString("phase")
+			prompt, _ := cmd.Flags().GetString("prompt")
+			if worktree == "" || prompt == "" {
+				return errors.New("--worktree and --prompt are required")
+			}
+
+			adapter := service.NewCLIAdapter(cfg.OpenCode.BinaryPath)
+			if _, err := adapter.ValidateCLI(cmd.Context()); err != nil {
+				return err
+			}
+			res, err := adapter.Run(cmd.Context(), domain.RunRequest{
+				WorktreePath: worktree,
+				Phase:        domain.Phase(phase),
+				Agent:        agent,
+				Prompt:       prompt,
+				Timeout:      cfg.OpenCode.DefaultTimeout,
+			})
+			if err != nil {
+				return err
+			}
+			out, err := json.MarshalIndent(res, "", "  ")
+			if err != nil {
+				return err
+			}
+			fmt.Println(string(out))
+			if res.ExitCode != 0 {
+				os.Exit(res.ExitCode)
+			}
+			return nil
+		},
 	}
+	f := cmd.Flags()
+	f.String("worktree", "", "worktree path (required)")
+	f.String("agent", "", "OpenCode agent name")
+	f.String("phase", "", "phase name (discovery|decision|implementation|validation)")
+	f.String("prompt", "", "prompt to send (required)")
+	return cmd
 }
 
 func migrateCmd() *cobra.Command {

@@ -1,0 +1,21 @@
+[Unit]
+Description=Agent Orchestrator Web Dashboard
+Documentation=file:/opt/agent-orchestrator/docs/deployment-piave.md
+After=network-online.target orchestrator.service
+Wants=orchestrator.service
+
+[Service]
+Type=exec
+ExecStart=/opt/agent-orchestrator/bin/orchestrator web --config /etc/agent-orchestrator/orchestrator.yaml
+EnvironmentFile=/etc/agent-orchestrator/secrets.env
+Restart=on-failure
+RestartSec=5
+User=orchestrator
+Group=orchestrator
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/agent-orchestrator
+
+[Install]
+WantedBy=multi-user.target

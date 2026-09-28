@@ -3,6 +3,7 @@ module github.com/stefenello/agent-orchestrator
 go 1.27.1
 
 require (
+	github.com/oklog/ulid/v2 v2.1.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1

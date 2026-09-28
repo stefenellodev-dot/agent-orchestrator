@@ -9,9 +9,12 @@ import (
 type RunRequest struct {
 	// WorktreePath is the WorkItem's single worktree, reused across phases.
 	WorktreePath string
-	Phase        Phase
-	Prompt       string
-	Agent        string
+	// BaseBranch/BaseCommitSHA anchor the objective diff evidence.
+	BaseBranch    string
+	BaseCommitSHA string
+	Phase         Phase
+	Prompt        string
+	Agent         string
 	// SessionID and Fork are best-effort. MVP correctness must not depend on
 	// session continuity; callers may leave them empty.
 	SessionID string

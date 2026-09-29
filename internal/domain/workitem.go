@@ -234,6 +234,7 @@ const (
 	EventPhaseStarted         EventType = "phase.started"
 	EventPhaseCompleted       EventType = "phase.completed"
 	EventPhaseFailed          EventType = "phase.failed"
+	EventPhaseBlocked         EventType = "phase.blocked"
 	EventGateCreated          EventType = "gate.created"
 	EventGateApproved         EventType = "gate.approved"
 	EventGateRejected         EventType = "gate.rejected"
@@ -248,6 +249,7 @@ const (
 	EventAuthorizationDenied  EventType = "authorization.denied"
 	EventWorkItemRetried      EventType = "workitem.retried"
 	EventWorkItemReconciled   EventType = "workitem.reconciled"
+	EventPolicyRejected       EventType = "policy.rejected"
 )
 
 // Event is an immutable audit-log entry. Persistence (Postgres) is the audit

@@ -74,6 +74,14 @@ func (o *Orchestrator) driveLoop(ctx context.Context, id domain.WorkItemID) erro
 			return fmt.Errorf("cannot drive phase %q", phase)
 		}
 
+		// R6 execution guards: project/runtime/worktree validity before
+		// Implementation. A rejection blocks the WorkItem (no auto-correction).
+		if phase == domain.PhaseImplementation {
+			if err := o.executionGuards(ctx, wi); err != nil {
+				return o.markBlocked(ctx, wi, err)
+			}
+		}
+
 		res, err := o.executePhase(ctx, wi)
 		if err != nil {
 			return o.markFailed(ctx, wi, err)
@@ -86,6 +94,10 @@ func (o *Orchestrator) driveLoop(ctx context.Context, id domain.WorkItemID) erro
 			}
 			if ok, reason := validationPassed(out, res.ExitCode); !ok {
 				return o.markFailed(ctx, wi, fmt.Errorf("validation failed: %s", reason))
+			}
+			// R6 completion guards: protected paths + mandatory validation evidence.
+			if err := o.completionGuards(ctx, wi, out); err != nil {
+				return o.markFailed(ctx, wi, err)
 			}
 		} else if res.ExitCode != 0 {
 			// A failed Discovery/Decision/Implementation must halt the workflow
@@ -436,6 +448,23 @@ func (o *Orchestrator) markFailed(ctx context.Context, wi *domain.WorkItem, caus
 		return err
 	}
 	_ = o.appendEvent(ctx, wi.ID, domain.EventPhaseFailed, domain.ActorSystem, map[string]any{
+		"phase": string(prev),
+		"error": cause.Error(),
+	})
+	return cause
+}
+
+// markBlocked halts a WorkItem at a policy guardrail. Unlike markFailed, the
+// worktree is retained and the phase advanced to blocked for human triage.
+func (o *Orchestrator) markBlocked(ctx context.Context, wi *domain.WorkItem, cause error) error {
+	prev := wi.CurrentPhase
+	wi.CurrentPhase = domain.PhaseBlocked
+	wi.Status = domain.PhaseBlocked
+	wi.UpdatedAt = o.now()
+	if err := o.store.UpdateWorkItem(ctx, wi); err != nil {
+		return err
+	}
+	_ = o.appendEvent(ctx, wi.ID, domain.EventPhaseBlocked, domain.ActorSystem, map[string]any{
 		"phase": string(prev),
 		"error": cause.Error(),
 	})

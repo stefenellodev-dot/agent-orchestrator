@@ -27,6 +27,13 @@ import (
 	"github.com/stefenello/agent-orchestrator/internal/web"
 )
 
+func boolOrDefault(v *bool, def bool) bool {
+	if v == nil {
+		return def
+	}
+	return *v
+}
+
 func main() {
 	rootCmd := &cobra.Command{
 		Use:     "orchestrator",
@@ -109,6 +116,7 @@ func runServe(cfg *config.Config) error {
 	orch.SetPhaseTimeout(cfg.OpenCode.DefaultTimeout)
 	orch.SetModel(cfg.OpenCode.Model)
 	orch.SetMaxActivePerProject(cfg.Concurrency.MaxActivePerProject)
+	orch.SetRequireRegisteredProject(cfg.Policy.RequireRegisteredProject)
 	orch.SetAgents(
 		cfg.OpenCode.Agents.Discovery,
 		cfg.OpenCode.Agents.Decision,
@@ -128,6 +136,11 @@ func runServe(cfg *config.Config) error {
 				LintCommands:      p.LintCmds,
 				TypecheckCommands: p.TypecheckCmds,
 			},
+			MaxActivePerProject: p.MaxActivePerProject,
+			AllowedAgents:       p.AllowedAgents,
+			ProtectedPaths:      p.ProtectedPaths,
+			RequireRuntime:      boolOrDefault(p.RequireRuntime, true),
+			RequireValidation:   boolOrDefault(p.RequireValidation, true),
 		})
 	}
 

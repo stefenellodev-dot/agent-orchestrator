@@ -256,6 +256,8 @@ func apiError(c echo.Context, err error) error {
 		status = http.StatusConflict
 	case errors.Is(err, service.ErrAuthorizationRequired):
 		status = http.StatusForbidden
+	case errors.Is(err, service.ErrPolicyViolation):
+		status = http.StatusForbidden
 	}
 	return c.JSON(status, map[string]string{"error": err.Error()})
 }

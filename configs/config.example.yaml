@@ -44,6 +44,11 @@ feature:
   # Test-only escape hatch. MUST stay false in production.
   auto_approve_for_tests: false
 
+policy:
+  # R6: when true, WorkItems may only target projects listed under `projects`.
+  # Default false preserves the pre-R6 acceptance behavior.
+  require_registered_project: false
+
 # Orchestrator-owned project definitions. Consumer repositories need no changes
 # and no agent/plugin is ever installed inside them.
 projects:
@@ -65,6 +70,12 @@ projects:
       - "go test ./..."
       - "go test -race ./..."
       - "go vet ./..."
+    # R6 policy (all optional; defaults preserve prior behavior):
+    # max_active_per_project: 2      # overrides concurrency.max_active_per_project
+    # allowed_agents: ["build"]      # R7: permitted agent names for this project
+    # protected_paths: ["migrations/", "docs/deployment-piave.md"]
+    # require_runtime: true          # refuse Implementation if OpenCode is unavailable
+    # require_validation: true       # refuse Complete without objective validation evidence
   - name: "fin-engine-v1"
     repo_path: "/Users/stefenello/development/fin-engine-desa"
     base_branch: "qa"

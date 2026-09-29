@@ -24,6 +24,8 @@ var (
 	ErrInvalidTransition = errors.New("invalid phase transition")
 	// ErrProjectBusy is returned when the project concurrency limit is reached.
 	ErrProjectBusy = errors.New("project already has an active work item")
+	// ErrPolicyViolation is returned when a policy/guardrail rejects an operation.
+	ErrPolicyViolation = errors.New("policy violation")
 )
 
 // CreateWorkItemInput is the caller-supplied description of new work.
@@ -68,6 +70,9 @@ type Orchestrator struct {
 	// (R5). createMu serialises creation so the limit is enforced race-free.
 	maxActivePerProject int
 	createMu            sync.Mutex
+
+	// requireRegisteredProject (R6) rejects WorkItems for unregistered projects.
+	requireRegisteredProject bool
 }
 
 // ProjectConfig is the orchestrator-owned definition of a project. Consumer
@@ -77,6 +82,13 @@ type ProjectConfig struct {
 	RepoPath   string            `json:"repo_path"`
 	BaseBranch string            `json:"base_branch"`
 	Validation ProjectValidation `json:"validation"`
+
+	// R6 policy (per project).
+	MaxActivePerProject int      `json:"max_active_per_project,omitempty"`
+	AllowedAgents       []string `json:"allowed_agents,omitempty"`
+	ProtectedPaths      []string `json:"protected_paths,omitempty"`
+	RequireRuntime      bool     `json:"require_runtime"`
+	RequireValidation   bool     `json:"require_validation"`
 }
 
 // ProjectList returns the registered projects, ordered by name.
@@ -134,6 +146,21 @@ func (o *Orchestrator) activeCount(ctx context.Context, project string) (int, er
 		}
 	}
 	return n, nil
+}
+
+// SetRequireRegisteredProject (R6) rejects WorkItems targeting unregistered
+// projects.
+func (o *Orchestrator) SetRequireRegisteredProject(v bool) { o.requireRegisteredProject = v }
+
+// policyFor returns the effective policy for a project (zero value if unregistered).
+func (o *Orchestrator) policyFor(project string) ProjectConfig { return o.projects[project] }
+
+// maxActiveFor returns the effective per-project concurrency limit.
+func (o *Orchestrator) maxActiveFor(project string) int {
+	if pc, ok := o.projects[project]; ok && pc.MaxActivePerProject > 0 {
+		return pc.MaxActivePerProject
+	}
+	return o.maxActivePerProject
 }
 
 // RegisterProject registers (or replaces) a project definition.
@@ -214,6 +241,17 @@ func (o *Orchestrator) CreateWorkItem(ctx context.Context, in CreateWorkItemInpu
 		in.Metadata = domain.Metadata{}
 	}
 
+	// R6 project policy: only registered projects (if required) and only the
+	// project's configured (protected) base branch may be targeted.
+	pc, registered := o.projects[in.Project]
+	if o.requireRegisteredProject && !registered {
+		return nil, fmt.Errorf("%w: project %q is not registered", ErrPolicyViolation, in.Project)
+	}
+	if registered && pc.BaseBranch != "" && in.BaseBranch != "" && in.BaseBranch != pc.BaseBranch {
+		return nil, fmt.Errorf("%w: base branch %q is not the project's protected base branch %q",
+			ErrPolicyViolation, in.BaseBranch, pc.BaseBranch)
+	}
+
 	// Enforce the configurable per-project concurrency limit (R5). Creation is
 	// serialised in-process so concurrent requests cannot overshoot the limit.
 	o.createMu.Lock()
@@ -222,7 +260,7 @@ func (o *Orchestrator) CreateWorkItem(ctx context.Context, in CreateWorkItemInpu
 	if err != nil {
 		return nil, err
 	}
-	if active >= o.maxActivePerProject {
+	if active >= o.maxActiveFor(in.Project) {
 		return nil, ErrProjectBusy
 	}
 

@@ -25,6 +25,7 @@ type Config struct {
 	Auth        AuthConfig        `mapstructure:"auth"`
 	Web         WebConfig         `mapstructure:"web"`
 	Feature     FeatureConfig     `mapstructure:"feature"`
+	Policy      PolicyConfig      `mapstructure:"policy"`
 	Projects    []ProjectConfig   `mapstructure:"projects"`
 }
 
@@ -90,6 +91,18 @@ type ProjectConfig struct {
 	ValidationCmds []string `mapstructure:"validation_commands"`
 	LintCmds       []string `mapstructure:"lint_commands"`
 	TypecheckCmds  []string `mapstructure:"typecheck_commands"`
+
+	// R6 policy (per project).
+	MaxActivePerProject int      `mapstructure:"max_active_per_project"`
+	AllowedAgents       []string `mapstructure:"allowed_agents"`
+	ProtectedPaths      []string `mapstructure:"protected_paths"`
+	RequireRuntime      *bool    `mapstructure:"require_runtime"`
+	RequireValidation   *bool    `mapstructure:"require_validation"`
+}
+
+// PolicyConfig holds operator-level (global) policy defaults.
+type PolicyConfig struct {
+	RequireRegisteredProject bool `mapstructure:"require_registered_project"`
 }
 
 func Load(path string) (*Config, error) {
@@ -160,6 +173,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("web.static_path", "./web/dist")
 
 	v.SetDefault("feature.auto_approve_for_tests", false)
+
+	v.SetDefault("policy.require_registered_project", false)
 }
 
 func (c *Config) AgentForPhase(phase string) string {

@@ -78,3 +78,54 @@ export async function loadMissionData(): Promise<MissionData> {
 
   return { health, projects, workitems, sessions, events, pendingGates, errors };
 }
+
+export interface ProjectsData {
+  projects: Project[];
+  workitems: WorkItem[];
+  errors: string[];
+}
+
+// Projects Center: registered projects (/api/projects) + WorkItems to associate
+// and to surface projects observed but not registered.
+export async function loadProjectsData(): Promise<ProjectsData> {
+  const errors: string[] = [];
+  const projects = await api.listProjects().catch((e) => {
+    errors.push(`projects: ${e}`);
+    return [] as Project[];
+  });
+  const workitems = await api.listWorkItems().catch((e) => {
+    errors.push(`workitems: ${e}`);
+    return [] as WorkItem[];
+  });
+  return { projects, workitems, errors };
+}
+
+export interface AgentsData {
+  health: Health | null;
+  workitems: WorkItem[];
+  sessions: SessionWithItem[];
+  errors: string[];
+}
+
+// Agents Center: available agents come from /healthz; execution evidence is the
+// aggregated sessions across WorkItems (N+1 accepted).
+export async function loadAgentsData(): Promise<AgentsData> {
+  const errors: string[] = [];
+  const health = await api.health().catch((e) => {
+    errors.push(`health: ${e}`);
+    return null;
+  });
+  const workitems = await api.listWorkItems().catch((e) => {
+    errors.push(`workitems: ${e}`);
+    return [] as WorkItem[];
+  });
+  const sessions: SessionWithItem[] = (
+    await Promise.all(
+      workitems.map(async (wi) => {
+        const s = await api.listSessions(wi.id).catch(() => [] as Session[]);
+        return s.map((x) => ({ ...x, workItem: wi }));
+      }),
+    )
+  ).flat();
+  return { health, workitems, sessions, errors };
+}

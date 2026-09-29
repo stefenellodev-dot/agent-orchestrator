@@ -860,3 +860,40 @@ pre.stderr {
   color: var(--text);
   margin-bottom: 0.6rem;
 }
+
+/* ---- UI-05: Projects / Agents / Operations ---- */
+.phase-dist {
+  margin-top: 0.4rem;
+}
+.mini-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+.mini-list li {
+  padding: 0.2rem 0;
+  border-top: 1px solid var(--border);
+}
+.mini-list li:first-child {
+  border-top: none;
+}
+.observed {
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+  margin-top: 0.6rem;
+}
+.row-active td {
+  background: rgba(47, 111, 235, 0.06);
+}
+.not-exposed {
+  columns: 2;
+  margin: 0.3rem 0 0;
+}
+.mt {
+  margin-top: 1rem;
+}
+@media (max-width: 720px) {
+  .not-exposed {
+    columns: 1;
+  }
+}

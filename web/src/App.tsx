@@ -7,6 +7,9 @@ import MissionControl from "./pages/MissionControl";
 import WorkItemList from "./pages/WorkItemList";
 import WorkItemDetail from "./pages/WorkItemDetail";
 import EvidenceCenter from "./pages/EvidenceCenter";
+import ProjectsCenter from "./pages/ProjectsCenter";
+import AgentsCenter from "./pages/AgentsCenter";
+import OperationsCenter from "./pages/OperationsCenter";
 import Placeholder from "./pages/Placeholder";
 
 function useHashRoute(): string {
@@ -48,24 +51,14 @@ export default function App() {
   } else if (wiMatch) {
     page = <WorkItemDetail id={decodeURIComponent(wiMatch[1])} />;
   } else if (hash === "#/projects") {
-    page = (
-      <Placeholder
-        title="Projects"
-        note="Registered projects, repositories, branches, validation commands and active WorkItems."
-      />
-    );
+    page = <ProjectsCenter />;
   } else if (hash === "#/agents") {
-    page = <Placeholder title="Agents" note="Available agents, active sessions and their WorkItems." />;
+    page = <AgentsCenter />;
   } else if (hash === "#/evidence" || hash.startsWith("#/evidence/")) {
     const evMatch = hash.match(/^#\/evidence\/(.+)$/);
     page = <EvidenceCenter id={evMatch ? decodeURIComponent(evMatch[1]) : undefined} />;
   } else if (hash === "#/operations") {
-    page = (
-      <Placeholder
-        title="Operations"
-        note="Orchestrator health, deployed commit, services and OpenCode worker status."
-      />
-    );
+    page = <OperationsCenter />;
   } else {
     page = <Placeholder title="Not found" note="Unknown route." />;
   }

@@ -65,6 +65,10 @@ func (s *stubService) ProjectList() []service.ProjectConfig {
 	return []service.ProjectConfig{{Name: "p", RepoPath: "/repo", BaseBranch: "main"}}
 }
 
+func (s *stubService) Diagnostics(_ context.Context) service.DiagnosticsReport {
+	return service.DiagnosticsReport{Overall: service.OverallOK}
+}
+
 func (s *stubService) CreateWorkItem(_ context.Context, in service.CreateWorkItemInput) (*domain.WorkItem, error) {
 	if in.Project == "" || in.Title == "" {
 		return nil, service.ErrInvalidInput

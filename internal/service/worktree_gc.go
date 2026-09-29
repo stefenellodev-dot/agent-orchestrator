@@ -9,29 +9,21 @@ import (
 	"github.com/stefenello/agent-orchestrator/internal/store"
 )
 
-// WorktreeGCResult summarises a garbage-collection pass. Paths are classified by
-// ownership/lifecycle; only "completed" worktrees are removed.
+// WorktreeGCResult summarises a worktree classification pass. Paths are
+// classified by ownership/lifecycle; only "completed" worktrees are candidates
+// for removal.
 type WorktreeGCResult struct {
-	Cleaned  []string // complete WorkItems whose leftover worktree was removed
+	Cleaned  []string // complete WorkItems whose leftover worktree is removable
 	Retained []string // failed/blocked WorkItems (retained for debugging)
 	Active   []string // non-terminal WorkItems (must not be touched)
 	Unknown  []string // no owning WorkItem → ambiguous, never auto-deleted
 }
 
-// ReconcileWorktrees performs an idempotent worktree lifecycle/GC pass.
-//
-// Ownership is deterministic: a worktree at <root>/<id> is owned by the
-// WorkItem with that id. Classification:
-//
-//   - complete        → clean the worktree (leftover from a crash mid-cleanup);
-//   - failed/blocked  → retain (debugging evidence);
-//   - non-terminal    → active, never touched;
-//   - no WorkItem     → unknown/ambiguous, never auto-deleted (reported only).
-//
-// Cleanup is safe (validated path + ownership) and idempotent (a removed
-// worktree no longer appears in List, so no duplicate events). Lifecycle
-// changes are audited.
-func (o *Orchestrator) ReconcileWorktrees(ctx context.Context) (WorktreeGCResult, error) {
+// ClassifyWorktrees is a READ-ONLY classification of worktrees under the root.
+// Ownership is deterministic: a worktree at <root>/<id> is owned by the WorkItem
+// with that id. It never mutates the filesystem or the store, so it is safe to
+// call from diagnostics.
+func (o *Orchestrator) ClassifyWorktrees(ctx context.Context) (WorktreeGCResult, error) {
 	var res WorktreeGCResult
 
 	paths, err := o.worktrees.List()
@@ -58,21 +50,41 @@ func (o *Orchestrator) ReconcileWorktrees(ctx context.Context) (WorktreeGCResult
 
 		switch {
 		case wi.CurrentPhase == domain.PhaseComplete:
-			if err := o.worktrees.Cleanup(ctx, string(id)); err != nil {
-				// Cleanup failure must not hide the WorkItem's functional result;
-				// it will be retried on the next GC pass.
-				continue
-			}
 			res.Cleaned = append(res.Cleaned, path)
-			_ = o.appendEvent(ctx, id, domain.EventWorktreeCleaned, domain.ActorSystem, map[string]any{
-				"path":   path,
-				"reason": "gc_completed",
-			})
 		case wi.CurrentPhase == domain.PhaseFailed || wi.CurrentPhase == domain.PhaseBlocked:
 			res.Retained = append(res.Retained, path)
 		default:
 			res.Active = append(res.Active, path)
 		}
 	}
+	return res, nil
+}
+
+// ReconcileWorktrees performs an idempotent worktree lifecycle/GC pass: it
+// classifies worktrees (ClassifyWorktrees) and removes only leftovers of
+// completed WorkItems. Active/failed/unknown worktrees are never touched.
+// Cleanup is safe (validated path + ownership) and idempotent (a removed
+// worktree no longer appears in List, so no duplicate events).
+func (o *Orchestrator) ReconcileWorktrees(ctx context.Context) (WorktreeGCResult, error) {
+	res, err := o.ClassifyWorktrees(ctx)
+	if err != nil {
+		return res, err
+	}
+
+	cleaned := make([]string, 0, len(res.Cleaned))
+	for _, path := range res.Cleaned {
+		id := domain.WorkItemID(filepath.Base(path))
+		if err := o.worktrees.Cleanup(ctx, string(id)); err != nil {
+			// Cleanup failure must not hide the WorkItem's functional result;
+			// it will be retried on the next GC pass.
+			continue
+		}
+		cleaned = append(cleaned, path)
+		_ = o.appendEvent(ctx, id, domain.EventWorktreeCleaned, domain.ActorSystem, map[string]any{
+			"path":   path,
+			"reason": "gc_completed",
+		})
+	}
+	res.Cleaned = cleaned
 	return res, nil
 }

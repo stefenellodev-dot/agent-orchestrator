@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -29,6 +30,7 @@ type OrchestratorService interface {
 	RequestChanges(ctx context.Context, id domain.WorkItemID, in service.ApprovalInput) error
 	Retry(ctx context.Context, id domain.WorkItemID, in service.RetryInput) error
 	ProjectList() []service.ProjectConfig
+	Diagnostics(ctx context.Context) service.DiagnosticsReport
 }
 
 // Options configures the HTTP server.
@@ -41,6 +43,8 @@ type Options struct {
 	StaticFS fs.FS
 	// BuildInfo is exposed via /healthz so a stale binary is always visible.
 	BuildInfo buildinfo.Info
+	// StartedAt is the process start time, used to report uptime in diagnostics.
+	StartedAt time.Time
 }
 
 type server struct {
@@ -78,6 +82,7 @@ func NewServer(svc OrchestratorService, opts Options) http.Handler {
 	api.POST("/workitems/:id/request-changes", s.requestChanges)
 	api.POST("/workitems/:id/retry", s.retry)
 	api.GET("/projects", s.listProjects)
+	api.GET("/diagnostics", s.diagnostics)
 
 	if opts.StaticDir != "" {
 		e.Static("/", opts.StaticDir)
@@ -121,6 +126,33 @@ func (s *server) health(c echo.Context) error {
 
 func (s *server) listProjects(c echo.Context) error {
 	return c.JSON(http.StatusOK, s.svc.ProjectList())
+}
+
+// diagnostics returns a read-only operational snapshot: orchestrator identity
+// plus structured findings (database, worker, work items/sessions, worktrees).
+// It never mutates state; remediation belongs to R1/R2.
+func (s *server) diagnostics(c echo.Context) error {
+	rep := s.svc.Diagnostics(c.Request().Context())
+	info := s.opts.BuildInfo
+	var uptime int64
+	if !s.opts.StartedAt.IsZero() {
+		uptime = int64(time.Since(s.opts.StartedAt).Seconds())
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"at":          rep.At,
+		"overall":     rep.Overall,
+		"duration_ms": rep.DurationMS,
+		"orchestrator": map[string]any{
+			"status":         "ok",
+			"version":        info.Version,
+			"commit":         info.Commit,
+			"build_time":     info.BuildTime,
+			"uptime_seconds": uptime,
+			"opencode":       info.OpenCode,
+			"agents":         info.Agents,
+		},
+		"findings": rep.Findings,
+	})
 }
 
 func (s *server) createWorkItem(c echo.Context) error {

@@ -38,6 +38,23 @@ func TestProjects_Endpoint(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), `"name":"p"`)
 }
 
+func TestDiagnostics_Endpoint(t *testing.T) {
+	e := api.NewServer(newStubService(), api.Options{
+		BuildInfo: buildinfo.Info{Version: "v9", Commit: "abc1234", OpenCode: "1.15.12"},
+	})
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/diagnostics", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"overall":"ok"`)
+	assert.Contains(t, rec.Body.String(), `"orchestrator"`)
+
+	// /healthz remains compatible.
+	rec = httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"commit":"abc1234"`)
+}
+
 func TestStaticFS_ServesAssetsWithSPAFallback(t *testing.T) {
 	fsys := fstest.MapFS{
 		"index.html":    &fstest.MapFile{Data: []byte("<html>app-root</html>")},

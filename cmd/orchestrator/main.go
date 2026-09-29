@@ -153,6 +153,7 @@ func runServe(cfg *config.Config) error {
 		AuthPassword: cfg.Auth.Password,
 		StaticFS:     staticFS(cfg),
 		BuildInfo:    id,
+		StartedAt:    time.Now().UTC(),
 	})
 
 	srv := &http.Server{

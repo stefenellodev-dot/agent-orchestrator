@@ -151,7 +151,8 @@ func (s *server) diagnostics(c echo.Context) error {
 			"opencode":       info.OpenCode,
 			"agents":         info.Agents,
 		},
-		"findings": rep.Findings,
+		"findings":     rep.Findings,
+		"capabilities": rep.Capabilities,
 	})
 }
 

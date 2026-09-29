@@ -127,7 +127,7 @@ func TestStore_GateWithAuthorization(t *testing.T) {
 	assert.Equal(t, domain.RiskLow, got.Payload.RiskAssessment)
 }
 
-func TestStore_ConcurrencyGuard(t *testing.T) {
+func TestStore_AllowsMultipleActivePerProject(t *testing.T) {
 	ctx := context.Background()
 	st := newStore(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -140,18 +140,14 @@ func TestStore_ConcurrencyGuard(t *testing.T) {
 		}
 	}
 
+	// R5: the database no longer enforces per-project uniqueness (the static
+	// index was removed); the orchestrator enforces the configurable limit.
 	require.NoError(t, st.CreateWorkItem(ctx, mk("p")))
-	assert.ErrorIs(t, st.CreateWorkItem(ctx, mk("p")), store.ErrProjectBusy)
+	require.NoError(t, st.CreateWorkItem(ctx, mk("p")), "store must allow multiple active WorkItems per project")
 
-	// Terminal state releases the slot.
-	first, err := st.ListWorkItems(ctx, "p")
+	active, err := st.ListWorkItems(ctx, "p")
 	require.NoError(t, err)
-	require.Len(t, first, 1)
-	first[0].Status = domain.PhaseComplete
-	first[0].CurrentPhase = domain.PhaseComplete
-	require.NoError(t, st.UpdateWorkItem(ctx, first[0]))
-
-	require.NoError(t, st.CreateWorkItem(ctx, mk("p")), "completed WorkItem should free the project slot")
+	assert.Len(t, active, 2)
 }
 
 func TestStore_EventsOrderedAndNotFound(t *testing.T) {

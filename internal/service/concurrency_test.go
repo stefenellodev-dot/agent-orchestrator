@@ -38,7 +38,8 @@ func TestCreateWorkItem_BusyDoesNotLeakWorktree(t *testing.T) {
 	_, err = svc.CreateWorkItem(ctx, service.CreateWorkItemInput{Project: "p", Title: "second", RepoPath: "/tmp/repo"})
 	require.ErrorIs(t, err, service.ErrProjectBusy)
 
-	// The rejected attempt must not leave an orphaned worktree behind.
-	assert.Equal(t, created+1, provisioner.createCalls, "worktree was provisioned before the busy check")
-	assert.Equal(t, 1, provisioner.cleanupCalls, "orphaned worktree must be cleaned up")
+	// R5: the limit is checked before provisioning, so the rejected attempt
+	// must not provision (or leak) a worktree at all.
+	assert.Equal(t, created, provisioner.createCalls, "rejected create must not provision a worktree")
+	assert.Equal(t, 0, provisioner.cleanupCalls)
 }

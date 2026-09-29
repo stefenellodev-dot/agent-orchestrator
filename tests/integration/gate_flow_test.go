@@ -73,6 +73,12 @@ func TestGateFlow_BlocksUntilHumanApproves(t *testing.T) {
 
 	events := fetchEvents(t, srv.URL+"/api/workitems/"+string(created.ID)+"/events")
 	assert.True(t, hasEvent(events, domain.EventAuthorizationGranted))
+
+	// Wait for worktree cleanup to finish so git's async pruning does not race
+	// the test's temp-dir cleanup.
+	require.Eventually(t, func() bool {
+		return hasEvent(fetchEvents(t, srv.URL+"/api/workitems/"+string(created.ID)+"/events"), domain.EventWorktreeCleaned)
+	}, 5*time.Second, 50*time.Millisecond)
 }
 
 func getWorkItem(t *testing.T, url string) domain.WorkItem {

@@ -11,41 +11,30 @@ import (
 
 // Store is a thread-safe in-memory implementation of store.Store.
 type Store struct {
-	mu sync.RWMutex
-	// maxActivePerProject enforces the MVP concurrency limit. Defaults to 1,
-	// mirroring the PostgreSQL partial unique index.
-	maxActivePerProject int
-	workItems           map[domain.WorkItemID]*domain.WorkItem
-	sessions            map[domain.SessionID]*domain.Session
-	gates               map[domain.GateID]*domain.Gate
-	gateByWI            map[domain.WorkItemID]domain.GateID
-	events              map[domain.WorkItemID][]*domain.Event
+	mu        sync.RWMutex
+	workItems map[domain.WorkItemID]*domain.WorkItem
+	sessions  map[domain.SessionID]*domain.Session
+	gates     map[domain.GateID]*domain.Gate
+	gateByWI  map[domain.WorkItemID]domain.GateID
+	events    map[domain.WorkItemID][]*domain.Event
 }
 
 func New() *Store {
 	return &Store{
-		maxActivePerProject: 1,
-		workItems:           make(map[domain.WorkItemID]*domain.WorkItem),
-		sessions:            make(map[domain.SessionID]*domain.Session),
-		gates:               make(map[domain.GateID]*domain.Gate),
-		gateByWI:            make(map[domain.WorkItemID]domain.GateID),
-		events:              make(map[domain.WorkItemID][]*domain.Event),
+		workItems: make(map[domain.WorkItemID]*domain.WorkItem),
+		sessions:  make(map[domain.SessionID]*domain.Session),
+		gates:     make(map[domain.GateID]*domain.Gate),
+		gateByWI:  make(map[domain.WorkItemID]domain.GateID),
+		events:    make(map[domain.WorkItemID][]*domain.Event),
 	}
 }
 
+// CreateWorkItem stores a WorkItem. The per-project concurrency limit is
+// enforced by the service (R5); the store only rejects duplicate ids.
 func (s *Store) CreateWorkItem(_ context.Context, wi *domain.WorkItem) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.workItems[wi.ID]; exists {
-		return store.ErrProjectBusy
-	}
-	active := 0
-	for _, existing := range s.workItems {
-		if existing.Project == wi.Project && !existing.Status.IsTerminal() {
-			active++
-		}
-	}
-	if active >= s.maxActivePerProject {
 		return store.ErrProjectBusy
 	}
 	s.workItems[wi.ID] = cloneWorkItem(wi)

@@ -63,6 +63,11 @@ type Orchestrator struct {
 	// discipline; also makes startup reconciliation safe/idempotent).
 	inflightMu sync.Mutex
 	inflight   map[domain.WorkItemID]bool
+
+	// maxActivePerProject is the configurable per-project concurrency limit
+	// (R5). createMu serialises creation so the limit is enforced race-free.
+	maxActivePerProject int
+	createMu            sync.Mutex
 }
 
 // ProjectConfig is the orchestrator-owned definition of a project. Consumer
@@ -102,7 +107,33 @@ func New(s store.Store, wm WorktreeManager, adapter domain.OpenCodeAdapter) *Orc
 		collector:    NewEvidenceCollector(),
 		projects:     map[string]ProjectConfig{},
 		inflight:     map[domain.WorkItemID]bool{},
+
+		maxActivePerProject: 1,
 	}
+}
+
+// SetMaxActivePerProject sets the configurable per-project concurrency limit
+// (R5). Values < 1 are treated as 1.
+func (o *Orchestrator) SetMaxActivePerProject(n int) {
+	if n < 1 {
+		n = 1
+	}
+	o.maxActivePerProject = n
+}
+
+// activeCount returns the number of non-terminal WorkItems for a project.
+func (o *Orchestrator) activeCount(ctx context.Context, project string) (int, error) {
+	items, err := o.store.ListWorkItems(ctx, project)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, wi := range items {
+		if !wi.CurrentPhase.IsTerminal() {
+			n++
+		}
+	}
+	return n, nil
 }
 
 // RegisterProject registers (or replaces) a project definition.
@@ -181,6 +212,18 @@ func (o *Orchestrator) CreateWorkItem(ctx context.Context, in CreateWorkItemInpu
 	}
 	if in.Metadata == nil {
 		in.Metadata = domain.Metadata{}
+	}
+
+	// Enforce the configurable per-project concurrency limit (R5). Creation is
+	// serialised in-process so concurrent requests cannot overshoot the limit.
+	o.createMu.Lock()
+	defer o.createMu.Unlock()
+	active, err := o.activeCount(ctx, in.Project)
+	if err != nil {
+		return nil, err
+	}
+	if active >= o.maxActivePerProject {
+		return nil, ErrProjectBusy
 	}
 
 	now := o.now()

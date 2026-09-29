@@ -108,6 +108,7 @@ func runServe(cfg *config.Config) error {
 	orch.SetAutoApprove(cfg.Feature.AutoApproveForTests)
 	orch.SetPhaseTimeout(cfg.OpenCode.DefaultTimeout)
 	orch.SetModel(cfg.OpenCode.Model)
+	orch.SetMaxActivePerProject(cfg.Concurrency.MaxActivePerProject)
 	orch.SetAgents(
 		cfg.OpenCode.Agents.Discovery,
 		cfg.OpenCode.Agents.Decision,

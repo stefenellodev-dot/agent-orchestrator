@@ -552,3 +552,252 @@ code {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- UI-03: WorkItem Command Center ---- */
+.row {
+  display: flex;
+  align-items: center;
+}
+.row.wrap {
+  flex-wrap: wrap;
+}
+.gap {
+  gap: 0.5rem;
+}
+
+.command-center {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.cc-header {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.cc-title h1 {
+  margin: 0.2rem 0 0.4rem;
+}
+.cc-identity {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0;
+  min-width: 260px;
+}
+.cc-identity dt,
+.evidence-grid dt {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.cc-identity dd,
+.evidence-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.cc-objective {
+  white-space: pre-wrap;
+  margin: 0;
+}
+.cc-gate {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.gate-compact {
+  margin-top: 0.6rem;
+}
+
+/* State flow */
+.stateflow {
+  padding: 0.4rem 0;
+}
+.sf-track {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  align-items: center;
+}
+.sf-step {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+}
+.sf-step .sf-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+}
+.sf-step.done {
+  color: var(--text);
+}
+.sf-step.done .sf-dot {
+  background: var(--ok);
+}
+.sf-step.current {
+  border-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: var(--shadow);
+}
+.sf-step.current .sf-dot {
+  background: var(--accent);
+}
+.sf-step.gate.current {
+  border-color: var(--warn);
+}
+.sf-step.gate.current .sf-dot {
+  background: var(--warn);
+}
+.sf-attention {
+  margin-top: 0.5rem;
+  color: var(--fail);
+  font-weight: 600;
+}
+.sf-attention.blocked {
+  color: var(--warn);
+}
+
+/* Timeline */
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tl-item {
+  display: grid;
+  grid-template-columns: 165px 12px 1fr;
+  gap: 0.4rem;
+  align-items: start;
+  padding: 0.25rem 0;
+  border-top: 1px solid var(--border);
+}
+.tl-item:first-child {
+  border-top: none;
+}
+.tl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  margin-top: 0.35rem;
+}
+.tl-body {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+/* Sessions */
+.sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.session {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  background: var(--bg-subtle);
+}
+.session.active {
+  border-color: var(--accent);
+}
+.session-head {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.session-meta {
+  margin-top: 0.3rem;
+}
+.session-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+  display: inline-block;
+  vertical-align: bottom;
+}
+.chip.running {
+  background: rgba(47, 111, 235, 0.14);
+  color: var(--accent);
+}
+
+/* Code blocks */
+.diffstat,
+pre {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+  overflow: auto;
+  font-size: 0.78rem;
+}
+pre.stderr {
+  color: var(--fail);
+}
+.cmd-results {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.cmd-result {
+  border-top: 1px solid var(--border);
+  padding-top: 0.4rem;
+}
+.cmd-line {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Evidence grid */
+.evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0;
+}
+
+/* Collapsibles */
+.collapse summary {
+  cursor: pointer;
+}
+
+/* Copyable SHA */
+.sha {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.05rem 0.4rem;
+  cursor: pointer;
+  color: var(--text);
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+.sha:hover {
+  background: var(--bg-subtle);
+}
+.sha-copy {
+  font-size: 0.68rem;
+}

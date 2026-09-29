@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/stefenello/agent-orchestrator/internal/domain"
@@ -56,6 +57,12 @@ type Orchestrator struct {
 	phaseTimeout time.Duration
 	collector    *EvidenceCollector
 	projects     map[string]ProjectConfig
+
+	// inflight tracks WorkItems currently being driven in this process, so a
+	// WorkItem is never processed by two drivers at once (single-driver
+	// discipline; also makes startup reconciliation safe/idempotent).
+	inflightMu sync.Mutex
+	inflight   map[domain.WorkItemID]bool
 }
 
 // ProjectConfig is the orchestrator-owned definition of a project. Consumer
@@ -94,6 +101,7 @@ func New(s store.Store, wm WorktreeManager, adapter domain.OpenCodeAdapter) *Orc
 		phaseTimeout: 10 * time.Minute,
 		collector:    NewEvidenceCollector(),
 		projects:     map[string]ProjectConfig{},
+		inflight:     map[domain.WorkItemID]bool{},
 	}
 }
 

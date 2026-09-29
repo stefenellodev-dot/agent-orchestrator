@@ -11,8 +11,35 @@ import (
 )
 
 // Drive runs the WorkItem workflow until it reaches a terminal phase or stops
-// at the human gate. It is safe to call once per WorkItem.
+// at the human gate. It enforces a single-driver discipline: concurrent calls
+// for the same WorkItem are ignored (the second returns immediately), so the
+// auto-drive path and startup reconciliation can never process one WorkItem
+// twice. It is safe to call multiple times.
 func (o *Orchestrator) Drive(ctx context.Context, id domain.WorkItemID) error {
+	if !o.acquire(id) {
+		return nil // already being driven by this process
+	}
+	defer o.release(id)
+	return o.driveLoop(ctx, id)
+}
+
+func (o *Orchestrator) acquire(id domain.WorkItemID) bool {
+	o.inflightMu.Lock()
+	defer o.inflightMu.Unlock()
+	if o.inflight[id] {
+		return false
+	}
+	o.inflight[id] = true
+	return true
+}
+
+func (o *Orchestrator) release(id domain.WorkItemID) {
+	o.inflightMu.Lock()
+	delete(o.inflight, id)
+	o.inflightMu.Unlock()
+}
+
+func (o *Orchestrator) driveLoop(ctx context.Context, id domain.WorkItemID) error {
 	for {
 		wi, err := o.store.GetWorkItem(ctx, id)
 		if err != nil {

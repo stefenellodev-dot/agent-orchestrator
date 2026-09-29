@@ -130,6 +130,14 @@ func runServe(cfg *config.Config) error {
 		})
 	}
 
+	// Startup reconciliation (R1): recover WorkItems/Sessions interrupted by a
+	// crash or restart, without manual repair.
+	if n, err := orch.Reconcile(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: startup reconciliation failed: %v\n", err)
+	} else if n > 0 {
+		fmt.Fprintf(os.Stderr, "startup reconciliation: %d work item(s) reconciled\n", n)
+	}
+
 	handler := api.NewServer(orch, api.Options{
 		AuthEnabled:  cfg.Auth.Enabled,
 		AuthUsername: cfg.Auth.Username,

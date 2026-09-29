@@ -247,6 +247,7 @@ const (
 	EventAuthorizationGranted EventType = "authorization.granted"
 	EventAuthorizationDenied  EventType = "authorization.denied"
 	EventWorkItemRetried      EventType = "workitem.retried"
+	EventWorkItemReconciled   EventType = "workitem.reconciled"
 )
 
 // Event is an immutable audit-log entry. Persistence (Postgres) is the audit

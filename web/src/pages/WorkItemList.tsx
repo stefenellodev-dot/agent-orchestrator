@@ -22,32 +22,34 @@ export default function WorkItemList() {
   if (items.length === 0) return <p className="muted">No WorkItems yet.</p>;
 
   return (
-    <>
+    <div className="command-center">
       <h1>Work Items</h1>
-      <table className="table">
-        <thead>
-          <tr>
-            <th>Title</th>
-            <th>Project</th>
-            <th>Phase</th>
-            <th>Updated</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((wi) => (
-            <tr key={wi.id}>
-              <td>
-                <a href={`#/workitems/${encodeURIComponent(wi.id)}`}>{wi.title}</a>
-              </td>
-              <td>{wi.project}</td>
-              <td>
-                <PhaseBadge phase={wi.current_phase} />
-              </td>
-              <td className="muted">{relativeTime(wi.updated_at)}</td>
+      <section className="panel">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Project</th>
+              <th>Phase</th>
+              <th>Updated</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </>
+          </thead>
+          <tbody>
+            {items.map((wi) => (
+              <tr key={wi.id}>
+                <td>
+                  <a href={`#/workitems/${encodeURIComponent(wi.id)}`}>{wi.title}</a>
+                </td>
+                <td>{wi.project}</td>
+                <td>
+                  <PhaseBadge phase={wi.current_phase} />
+                </td>
+                <td className="muted">{relativeTime(wi.updated_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    </div>
   );
 }

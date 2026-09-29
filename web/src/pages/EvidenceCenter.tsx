@@ -129,6 +129,7 @@ export default function EvidenceCenter({ id }: { id?: string }) {
       return;
     }
     let alive = true;
+    let timer: number | undefined;
     const tick = async () => {
       try {
         const item = await api.getWorkItem(id);
@@ -143,19 +144,20 @@ export default function EvidenceCenter({ id }: { id?: string }) {
         setSessions(se);
         setGate(gt);
         setError(null);
+        if (TERMINAL.includes(item.current_phase) && timer) {
+          clearInterval(timer);
+          timer = undefined;
+        }
       } catch (e) {
         if (alive) setError(String(e));
       }
     };
     tick();
-    const terminal = wi ? TERMINAL.includes(wi.current_phase) : false;
-    if (terminal) return () => { alive = false; };
-    const t = setInterval(tick, 5000);
+    timer = window.setInterval(tick, 5000);
     return () => {
       alive = false;
-      clearInterval(t);
+      if (timer) clearInterval(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   if (error && !wi) return <p className="error">{error}</p>;
@@ -174,7 +176,10 @@ export default function EvidenceCenter({ id }: { id?: string }) {
       </div>
 
       {!id ? (
-        <Selector items={items} />
+        <>
+          <h1>Evidence Center</h1>
+          <Selector items={items} />
+        </>
       ) : !wi ? (
         <p className="muted">Loading evidence…</p>
       ) : (

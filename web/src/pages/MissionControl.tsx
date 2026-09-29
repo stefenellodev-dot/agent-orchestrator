@@ -39,6 +39,7 @@ export default function MissionControl() {
 
   return (
     <div className="mission">
+      <h1>Mission Control</h1>
       <SummaryBar data={data} />
       <HumanGatesPanel items={data.pendingGates} />
       <Kanban items={data.workitems} />

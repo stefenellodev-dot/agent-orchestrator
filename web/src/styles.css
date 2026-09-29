@@ -14,6 +14,7 @@
   --fail: #b3261e;
   --fail-bg: #fbe0de;
   --chip-bg: #e8eaef;
+  --accent-soft: rgba(47, 111, 235, 0.14);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
   color-scheme: light;
 }
@@ -34,6 +35,7 @@
   --fail: #f08a82;
   --fail-bg: #3a1c19;
   --chip-bg: #262c35;
+  --accent-soft: rgba(91, 140, 255, 0.18);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
   color-scheme: dark;
 }
@@ -57,6 +59,12 @@ a {
 }
 a:hover {
   text-decoration: underline;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 4px;
 }
 
 h1 {
@@ -210,6 +218,7 @@ button.ghost:hover {
   padding: 0.9rem;
   margin-bottom: 1rem;
   box-shadow: var(--shadow);
+  overflow-x: auto;
 }
 .panel.gates {
   border-left: 3px solid var(--warn);
@@ -267,7 +276,7 @@ button.ghost:hover {
 }
 .phase-implementation,
 .phase-validation {
-  background: rgba(47, 111, 235, 0.14);
+  background: var(--accent-soft);
   color: var(--accent);
 }
 .phase-complete {
@@ -734,7 +743,7 @@ code {
   vertical-align: bottom;
 }
 .chip.running {
-  background: rgba(47, 111, 235, 0.14);
+  background: var(--accent-soft);
   color: var(--accent);
 }
 
@@ -883,7 +892,7 @@ pre.stderr {
   margin-top: 0.6rem;
 }
 .row-active td {
-  background: rgba(47, 111, 235, 0.06);
+  background: var(--accent-soft);
 }
 .not-exposed {
   columns: 2;

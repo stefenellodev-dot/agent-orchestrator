@@ -23,12 +23,14 @@ export default function WorkItemDetail({ id }: { id: string }) {
   const refresh = useCallback(async () => {
     const item = await api.getWorkItem(id);
     setWi(item);
-    const [ev, se] = await Promise.all([api.listEvents(id), api.listSessions(id)]);
+    const [ev, se, gt] = await Promise.all([
+      api.listEvents(id),
+      api.listSessions(id),
+      api.getGate(id).catch(() => null),
+    ]);
     setEvents(ev);
     setSessions(se);
-    if (item.current_phase === "awaiting_approval") {
-      setGate(await api.getGate(id).catch(() => null));
-    }
+    setGate(gt);
   }, [id]);
 
   const terminal = wi ? TERMINAL.includes(wi.current_phase) : false;

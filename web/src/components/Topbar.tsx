@@ -11,6 +11,13 @@ const LINKS = [
   { href: "#/operations", label: "Operations" },
 ];
 
+// Highlights the section for both the exact route and its subroutes
+// (e.g. #/workitems/:id keeps "Work Items" active).
+function isActive(current: string, href: string): boolean {
+  if (href === "#/") return current === "#/" || current === "";
+  return current === href || current.startsWith(href + "/");
+}
+
 export default function Topbar({
   health,
   theme,
@@ -27,9 +34,14 @@ export default function Topbar({
       <a href="#/" className="brand">
         Agent Orchestrator
       </a>
-      <nav className="nav">
+      <nav className="nav" aria-label="Primary">
         {LINKS.map((l) => (
-          <a key={l.href} href={l.href} className={current === l.href ? "active" : ""}>
+          <a
+            key={l.href}
+            href={l.href}
+            className={isActive(current, l.href) ? "active" : ""}
+            aria-current={isActive(current, l.href) ? "page" : undefined}
+          >
             {l.label}
           </a>
         ))}

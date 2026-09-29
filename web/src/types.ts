@@ -62,6 +62,18 @@ export interface Approval {
   authorization?: AuthorizationRecord;
 }
 
+export interface PlanStep {
+  description: string;
+  files?: string[];
+  commands?: string[];
+}
+
+export interface Plan {
+  steps?: PlanStep[];
+  test_strategy?: string;
+  confidence?: number;
+}
+
 export interface Gate {
   id: string;
   work_item_id: string;
@@ -69,6 +81,7 @@ export interface Gate {
   status: "pending" | "approved" | "rejected" | "changes_requested";
   approvals: Approval[];
   payload: {
+    plan?: Plan;
     diff_preview?: string;
     risk_assessment?: string;
     evidence?: { type: string; summary: string }[];

@@ -801,3 +801,62 @@ pre.stderr {
 .sha-copy {
   font-size: 0.68rem;
 }
+
+/* ---- UI-04: Evidence Center ---- */
+.tag {
+  font-size: 0.62rem;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-left: 0.3rem;
+  vertical-align: middle;
+}
+.tag.persisted {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+.tag.derived {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.prov {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+.prov-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.prov-box {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.05rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem 0.55rem;
+  background: var(--bg-subtle);
+}
+.prov-label {
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+.prov-detail {
+  color: var(--text-muted);
+}
+.prov-arrow {
+  color: var(--text-muted);
+}
+.search {
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text);
+  margin-bottom: 0.6rem;
+}

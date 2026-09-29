@@ -154,6 +154,9 @@ export default function WorkItemDetail({ id }: { id: string }) {
       <section className="panel">
         <h2>Evidence summary</h2>
         <EvidenceSummary wi={wi} sessions={sessions} />
+        <p>
+          <a href={`#/evidence/${encodeURIComponent(wi.id)}`}>Open Evidence Center →</a>
+        </p>
       </section>
 
       {/* 6. Validation */}

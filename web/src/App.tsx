@@ -6,6 +6,7 @@ import Topbar from "./components/Topbar";
 import MissionControl from "./pages/MissionControl";
 import WorkItemList from "./pages/WorkItemList";
 import WorkItemDetail from "./pages/WorkItemDetail";
+import EvidenceCenter from "./pages/EvidenceCenter";
 import Placeholder from "./pages/Placeholder";
 
 function useHashRoute(): string {
@@ -55,13 +56,9 @@ export default function App() {
     );
   } else if (hash === "#/agents") {
     page = <Placeholder title="Agents" note="Available agents, active sessions and their WorkItems." />;
-  } else if (hash === "#/evidence") {
-    page = (
-      <Placeholder
-        title="Evidence"
-        note="Commit SHA, git diff, git diff --check, tests/race/vet, commands and exit codes."
-      />
-    );
+  } else if (hash === "#/evidence" || hash.startsWith("#/evidence/")) {
+    const evMatch = hash.match(/^#\/evidence\/(.+)$/);
+    page = <EvidenceCenter id={evMatch ? decodeURIComponent(evMatch[1]) : undefined} />;
   } else if (hash === "#/operations") {
     page = (
       <Placeholder

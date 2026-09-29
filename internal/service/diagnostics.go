@@ -44,10 +44,11 @@ type Finding struct {
 // DiagnosticsReport is a read-only snapshot of the Orchestrator's operational
 // state. It never mutates WorkItems, Sessions, worktrees or repositories.
 type DiagnosticsReport struct {
-	At         time.Time `json:"at"`
-	DurationMS int64     `json:"duration_ms"`
-	Overall    string    `json:"overall"` // ok | degraded | unhealthy
-	Findings   []Finding `json:"findings"`
+	At           time.Time `json:"at"`
+	DurationMS   int64     `json:"duration_ms"`
+	Overall      string    `json:"overall"` // ok | degraded | unhealthy
+	Capabilities []string  `json:"capabilities,omitempty"`
+	Findings     []Finding `json:"findings"`
 }
 
 // Diagnostics runs a set of small, deterministic, read-only checks and returns a
@@ -134,7 +135,7 @@ func (o *Orchestrator) Diagnostics(ctx context.Context) DiagnosticsReport {
 		}
 	}
 
-	report := DiagnosticsReport{At: start, Findings: findings}
+	report := DiagnosticsReport{At: start, Findings: findings, Capabilities: append([]string(nil), o.capabilities...)}
 	report.Overall = overallOf(findings)
 	report.DurationMS = time.Since(start).Milliseconds()
 	return report
@@ -167,6 +168,16 @@ func (o *Orchestrator) diagnoseWorkItem(wi *domain.WorkItem, sessions []*domain.
 
 	if !wi.CurrentPhase.RequiresOpenCodeRun() {
 		return out // e.g. awaiting_approval: legitimately paused, no execution expected
+	}
+
+	// R7: a WorkItem capability must be known to the runtime.
+	if wi.Capability != "" && !o.knownCapability(wi.Capability) {
+		out = append(out, Finding{
+			Check: "capabilities", Status: StatusWarn, Severity: SeverityWarning,
+			Finding:    "WorkItem uses a capability not reported by the runtime",
+			WorkItemID: string(wi.ID), Cause: "capability " + wi.Capability,
+			Recommendation: "verify the agent exists (opencode agent list) or clear the WorkItem capability",
+		})
 	}
 
 	hasPhaseSession := false

@@ -132,7 +132,7 @@ func (o *Orchestrator) executePhase(ctx context.Context, wi *domain.WorkItem) (*
 		return nil, errors.New("no OpenCode adapter configured")
 	}
 
-	agent := o.agentFor(wi.CurrentPhase)
+	agent := o.capabilityFor(wi, wi.CurrentPhase)
 	prompt := PromptFor(wi, wi.CurrentPhase, o.approvedPlanFor(ctx, wi, wi.CurrentPhase))
 
 	sess := &domain.Session{
@@ -151,6 +151,7 @@ func (o *Orchestrator) executePhase(ctx context.Context, wi *domain.WorkItem) (*
 		"session_id": string(sess.ID),
 		"phase":      string(wi.CurrentPhase),
 		"agent":      agent,
+		"capability": wi.Capability,
 	})
 
 	res, runErr := o.adapter.Run(ctx, domain.RunRequest{

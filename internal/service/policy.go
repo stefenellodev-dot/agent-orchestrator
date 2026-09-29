@@ -46,6 +46,10 @@ func (o *Orchestrator) executionGuards(ctx context.Context, wi *domain.WorkItem)
 	if wi.WorktreePath == "" {
 		return o.policyReject(ctx, wi, "worktree", "execution", "worktree not provisioned", "")
 	}
+	// R7: the resolved agent for this phase must satisfy allowed_agents.
+	if agent := o.capabilityFor(wi, wi.CurrentPhase); !allowedAgent(pc, agent) {
+		return o.policyReject(ctx, wi, "allowed_agents", "execution", "agent not permitted", agent)
+	}
 	return nil
 }
 

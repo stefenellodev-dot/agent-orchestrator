@@ -12,6 +12,7 @@ type createWorkItemRequest struct {
 	Priority    string         `json:"priority"`
 	BaseBranch  string         `json:"base_branch"`
 	RepoPath    string         `json:"repo_path"`
+	Capability  string         `json:"capability"`
 	Assignee    string         `json:"assignee"`
 	Metadata    map[string]any `json:"metadata"`
 }
@@ -24,6 +25,7 @@ func (r createWorkItemRequest) toInput() service.CreateWorkItemInput {
 		Priority:    domainPriority(r.Priority),
 		BaseBranch:  r.BaseBranch,
 		RepoPath:    r.RepoPath,
+		Capability:  r.Capability,
 		Assignee:    r.Assignee,
 		Metadata:    r.Metadata,
 	}

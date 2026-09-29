@@ -95,11 +95,13 @@ func runServe(cfg *config.Config) error {
 	fmt.Fprintf(os.Stderr, "orchestrator starting: %s\n", id.String())
 
 	adapter := service.NewCLIAdapter(cfg.OpenCode.BinaryPath)
+	var supportedAgents []string
 	if caps, err := adapter.Available(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: opencode CLI probe failed: %v\n", err)
 	} else {
 		id.OpenCode = caps.Version
 		id.Agents = strings.Join(caps.SupportedAgents, ",")
+		supportedAgents = caps.SupportedAgents
 		fmt.Fprintf(os.Stderr, "opencode %s detected (agents: %v)\n", caps.Version, caps.SupportedAgents)
 	}
 
@@ -117,6 +119,7 @@ func runServe(cfg *config.Config) error {
 	orch.SetModel(cfg.OpenCode.Model)
 	orch.SetMaxActivePerProject(cfg.Concurrency.MaxActivePerProject)
 	orch.SetRequireRegisteredProject(cfg.Policy.RequireRegisteredProject)
+	orch.SetCapabilities(supportedAgents)
 	orch.SetAgents(
 		cfg.OpenCode.Agents.Discovery,
 		cfg.OpenCode.Agents.Decision,

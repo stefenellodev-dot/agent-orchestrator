@@ -100,11 +100,14 @@ type WorkItem struct {
 	// BaseCommitSHA is the immutable commit the WorkItem was branched from.
 	// Evidence is always computed against this SHA, never against a moving
 	// branch reference.
-	BaseCommitSHA string    `json:"base_commit_sha,omitempty"`
-	Assignee      string    `json:"assignee,omitempty"`
-	Metadata      Metadata  `json:"metadata"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	BaseCommitSHA string `json:"base_commit_sha,omitempty"`
+	// Capability names the OpenCode agent profile to use for every phase of
+	// this WorkItem. Empty means use the per-phase configured agents (R7).
+	Capability string    `json:"capability,omitempty"`
+	Assignee   string    `json:"assignee,omitempty"`
+	Metadata   Metadata  `json:"metadata"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 // Metadata is free-form, non-authoritative data. It must never drive state.

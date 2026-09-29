@@ -38,6 +38,7 @@ func TestStore_WorkItemRoundTrip(t *testing.T) {
 		WorktreePath:  "/wt/WI-1",
 		BaseBranch:    "main",
 		BaseCommitSHA: "deadbeefcafe",
+		Capability:    "build",
 		Metadata:      domain.Metadata{"k": "v"},
 		CreatedAt:     now,
 		UpdatedAt:     now,
@@ -49,6 +50,7 @@ func TestStore_WorkItemRoundTrip(t *testing.T) {
 	assert.Equal(t, wi.ID, got.ID)
 	assert.Equal(t, domain.PriorityHigh, got.Priority)
 	assert.Equal(t, "deadbeefcafe", got.BaseCommitSHA, "immutable base commit must persist")
+	assert.Equal(t, "build", got.Capability, "work item capability must persist")
 	assert.Equal(t, "v", got.Metadata["k"])
 	assert.WithinDuration(t, now, got.CreatedAt, time.Millisecond)
 

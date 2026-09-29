@@ -36,6 +36,7 @@ type CreateWorkItemInput struct {
 	Priority    domain.Priority
 	BaseBranch  string
 	RepoPath    string
+	Capability  string
 	Assignee    string
 	Metadata    domain.Metadata
 }
@@ -55,6 +56,7 @@ type Orchestrator struct {
 	// production, where the gate pauses the workflow.
 	autoApprove  bool
 	agents       map[domain.Phase]string
+	capabilities []string
 	model        string
 	phaseTimeout time.Duration
 	collector    *EvidenceCollector
@@ -213,7 +215,47 @@ func (o *Orchestrator) SetPhaseTimeout(d time.Duration) {
 	}
 }
 
-func (o *Orchestrator) agentFor(phase domain.Phase) string { return o.agents[phase] }
+// SetCapabilities records the OpenCode agent profiles the runtime reports
+// (R7). Used to validate WorkItem capabilities. An empty set means the runtime
+// capability probe is unavailable and validation is permissive.
+func (o *Orchestrator) SetCapabilities(caps []string) { o.capabilities = caps }
+
+// capabilityFor resolves the agent profile for a phase (R7): an explicit
+// WorkItem capability wins for every phase; otherwise the per-phase configured
+// agent is used.
+func (o *Orchestrator) capabilityFor(wi *domain.WorkItem, phase domain.Phase) string {
+	if wi.Capability != "" {
+		return wi.Capability
+	}
+	return o.agents[phase]
+}
+
+// knownCapability reports whether name is a capability reported by the runtime.
+func (o *Orchestrator) knownCapability(name string) bool {
+	if len(o.capabilities) == 0 {
+		return true
+	}
+	for _, c := range o.capabilities {
+		if c == name {
+			return true
+		}
+	}
+	return false
+}
+
+// allowedAgent reports whether agent is permitted by a project's allowed_agents
+// policy (empty list = all allowed).
+func allowedAgent(pc ProjectConfig, agent string) bool {
+	if len(pc.AllowedAgents) == 0 {
+		return true
+	}
+	for _, a := range pc.AllowedAgents {
+		if a == agent {
+			return true
+		}
+	}
+	return false
+}
 
 // CreateWorkItem creates a WorkItem, provisions exactly one worktree, and
 // starts the Discovery phase. It emits workitem.created and phase.started.
@@ -251,6 +293,18 @@ func (o *Orchestrator) CreateWorkItem(ctx context.Context, in CreateWorkItemInpu
 		return nil, fmt.Errorf("%w: base branch %q is not the project's protected base branch %q",
 			ErrPolicyViolation, in.BaseBranch, pc.BaseBranch)
 	}
+	// R7 capability policy: an explicit WorkItem capability must be permitted by
+	// the project and known to the runtime.
+	if registered && in.Capability != "" {
+		if !allowedAgent(pc, in.Capability) {
+			return nil, fmt.Errorf("%w: capability %q is not permitted for project %q",
+				ErrPolicyViolation, in.Capability, in.Project)
+		}
+		if !o.knownCapability(in.Capability) {
+			return nil, fmt.Errorf("%w: capability %q is not a known agent",
+				ErrPolicyViolation, in.Capability)
+		}
+	}
 
 	// Enforce the configurable per-project concurrency limit (R5). Creation is
 	// serialised in-process so concurrent requests cannot overshoot the limit.
@@ -274,6 +328,7 @@ func (o *Orchestrator) CreateWorkItem(ctx context.Context, in CreateWorkItemInpu
 		Status:       domain.PhaseDiscovery,
 		CurrentPhase: domain.PhaseDiscovery,
 		BaseBranch:   in.BaseBranch,
+		Capability:   in.Capability,
 		Assignee:     in.Assignee,
 		Metadata:     in.Metadata,
 		CreatedAt:    now,

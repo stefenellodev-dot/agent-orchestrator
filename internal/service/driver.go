@@ -39,6 +39,15 @@ func (o *Orchestrator) release(id domain.WorkItemID) {
 	o.inflightMu.Unlock()
 }
 
+// isInflight reports whether a driver for the WorkItem is running in this
+// process. Startup reconciliation uses it to distinguish a legitimate active
+// execution (owned here, must not be interrupted) from an orphaned one.
+func (o *Orchestrator) isInflight(id domain.WorkItemID) bool {
+	o.inflightMu.Lock()
+	defer o.inflightMu.Unlock()
+	return o.inflight[id]
+}
+
 func (o *Orchestrator) driveLoop(ctx context.Context, id domain.WorkItemID) error {
 	for {
 		wi, err := o.store.GetWorkItem(ctx, id)

@@ -1,4 +1,4 @@
-import type { Event, Gate, Session, WorkItem } from "../types";
+import type { Event, Gate, Health, Project, Session, WorkItem } from "../types";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -13,6 +13,8 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  health: () => req<Health>(`/healthz`),
+
   listWorkItems: (project?: string) =>
     req<WorkItem[]>(`/api/workitems${project ? `?project=${encodeURIComponent(project)}` : ""}`),
 
@@ -23,6 +25,8 @@ export const api = {
   listSessions: (id: string) => req<Session[]>(`/api/workitems/${id}/sessions`),
 
   getGate: (id: string) => req<Gate>(`/api/workitems/${id}/gate`),
+
+  listProjects: () => req<Project[]>(`/api/projects`),
 
   approve: (id: string, user: string, comment: string) =>
     req<unknown>(`/api/workitems/${id}/approve`, {

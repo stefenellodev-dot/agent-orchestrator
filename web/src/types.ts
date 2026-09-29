@@ -18,8 +18,33 @@ export interface WorkItem {
   current_phase: Phase;
   worktree_path: string;
   base_branch: string;
+  base_commit_sha?: string;
+  assignee?: string;
+  metadata?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProjectValidation {
+  test_commands?: string[];
+  lint_commands?: string[];
+  typecheck_commands?: string[];
+}
+
+export interface Project {
+  name: string;
+  repo_path: string;
+  base_branch: string;
+  validation?: ProjectValidation;
+}
+
+export interface Health {
+  status: string;
+  version: string;
+  commit: string;
+  build_time: string;
+  opencode?: string;
+  agents?: string;
 }
 
 export interface AuthorizationRecord {
@@ -62,6 +87,7 @@ export interface CommandResult {
 }
 
 export interface SessionOutput {
+  agent_text?: string;
   base_commit_sha?: string;
   commit_sha?: string;
   diff?: string;
@@ -69,17 +95,20 @@ export interface SessionOutput {
   test_commands?: CommandResult[];
   lint_commands?: CommandResult[];
   typecheck_commands?: CommandResult[];
+  validation_output?: string;
 }
 
 export interface Session {
   id: string;
   work_item_id: string;
   phase: Phase;
+  opencode_session?: string;
   status: string;
   agent: string;
   prompt: string;
   exit_code: number;
   output?: SessionOutput;
+  error?: string;
   started_at: string;
   completed_at?: string;
 }

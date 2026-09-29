@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { Event, Gate, Session, WorkItem } from "../types";
 import ApprovalPanel from "./ApprovalPanel";
-import { PhaseBadge } from "./WorkItemList";
+import PhaseBadge from "../components/PhaseBadge";
 
 export default function WorkItemDetail({ id }: { id: string }) {
   const [wi, setWi] = useState<WorkItem | null>(null);

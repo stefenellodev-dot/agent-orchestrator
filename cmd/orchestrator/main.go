@@ -138,6 +138,15 @@ func runServe(cfg *config.Config) error {
 		fmt.Fprintf(os.Stderr, "startup reconciliation: %d work item(s) reconciled\n", n)
 	}
 
+	// Worktree lifecycle/GC (R2): classify worktrees by ownership and remove
+	// only leftovers of completed WorkItems; never touch active/unknown ones.
+	if gc, err := orch.ReconcileWorktrees(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: worktree GC failed: %v\n", err)
+	} else if len(gc.Cleaned)+len(gc.Retained)+len(gc.Active)+len(gc.Unknown) > 0 {
+		fmt.Fprintf(os.Stderr, "worktree gc: cleaned=%d retained=%d active=%d unknown=%d\n",
+			len(gc.Cleaned), len(gc.Retained), len(gc.Active), len(gc.Unknown))
+	}
+
 	handler := api.NewServer(orch, api.Options{
 		AuthEnabled:  cfg.Auth.Enabled,
 		AuthUsername: cfg.Auth.Username,

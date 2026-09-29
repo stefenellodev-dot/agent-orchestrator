@@ -141,3 +141,5 @@ func (f *fakeProvisioner) Cleanup(_ context.Context, _ string) error {
 }
 
 func (f *fakeProvisioner) Path(workItemID string) string { return "/tmp/wt/" + workItemID }
+
+func (f *fakeProvisioner) List() ([]string, error) { return nil, nil }

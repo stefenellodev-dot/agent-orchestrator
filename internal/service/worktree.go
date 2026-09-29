@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -31,6 +32,9 @@ type WorktreeManager interface {
 	Cleanup(ctx context.Context, workItemID string) error
 	// Path returns the on-disk path for a WorkItem without creating anything.
 	Path(workItemID string) string
+	// List returns the paths of all git worktrees currently under the root, for
+	// orphan detection / garbage collection.
+	List() ([]string, error)
 }
 
 // GitWorktreeManager provisions one Git worktree per WorkItem under a root
@@ -121,6 +125,10 @@ func (m *GitWorktreeManager) Cleanup(ctx context.Context, workItemID string) err
 	if err != nil {
 		return fmt.Errorf("resolve main repo for %s: %w", path, err)
 	}
+	// Safety: never treat the main repository as the worktree to remove.
+	if filepath.Clean(repo) == filepath.Clean(path) {
+		return fmt.Errorf("refusing to remove main repository %s", repo)
+	}
 	if _, err := runGitCommand(ctx, repo, "worktree", "remove", "--force", path); err != nil {
 		return fmt.Errorf("git worktree remove: %w", err)
 	}
@@ -128,6 +136,31 @@ func (m *GitWorktreeManager) Cleanup(ctx context.Context, workItemID string) err
 	_, _ = runGitCommand(ctx, repo, "branch", "-D", branchNameFor(workItemID))
 	_, _ = runGitCommand(ctx, repo, "worktree", "prune")
 	return nil
+}
+
+// List returns the paths of all git worktrees currently under the root. Only
+// directories that are real linked worktrees are returned; anything else is
+// ignored (never a candidate for cleanup).
+func (m *GitWorktreeManager) List() ([]string, error) {
+	entries, err := os.ReadDir(m.root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var out []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		p := filepath.Join(m.root, e.Name())
+		if isWorktree(p) {
+			out = append(out, p)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 const worktreeBranchPrefix = "workitem/"

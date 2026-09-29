@@ -61,6 +61,7 @@ projects:
     # Objective self-validation. Requires the pinned Go toolchain mounted into
     # the worker (see docs/deployment-piave.md).
     validation_commands:
+      - "git diff --check"
       - "go test ./..."
       - "go test -race ./..."
       - "go vet ./..."

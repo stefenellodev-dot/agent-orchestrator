@@ -85,7 +85,7 @@ exit 0
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "opencode"), []byte(script), 0o755))
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	caps, err := service.NewCLIAdapter("opencode").ValidateCLI(context.Background())
+	caps, err := service.NewCLIAdapter("opencode").Available(context.Background())
 	require.NoError(t, err)
 	assert.True(t, caps.SupportsJSON, "help printed to stderr must still be parsed")
 	assert.True(t, caps.SupportsAgent)

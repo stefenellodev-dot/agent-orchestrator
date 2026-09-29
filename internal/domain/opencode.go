@@ -2,7 +2,16 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"time"
+)
+
+// Runtime error classification (R4).
+var (
+	// ErrRuntimeUnavailable means the runtime binary/probe could not be used.
+	ErrRuntimeUnavailable = errors.New("runtime unavailable")
+	// ErrProcessStart means the runtime process could not be started.
+	ErrProcessStart = errors.New("runtime process start failed")
 )
 
 // RunRequest describes a single OpenCode phase execution.
@@ -34,6 +43,10 @@ type RunResult struct {
 	// AgentText is the assistant's final text, extracted from the output when
 	// the format is understood. Best-effort.
 	AgentText string
+	// TimedOut/Canceled distinguish interruption from a task/execution failure.
+	// A non-zero ExitCode without these flags is an execution (task) failure.
+	TimedOut bool
+	Canceled bool
 	// Objective evidence, collected by the adapter (not self-reported).
 	BaseCommitSHA string
 	CommitSHA     string
@@ -61,9 +74,20 @@ type CLICapabilities struct {
 	SupportedAgents  []string
 }
 
-// OpenCodeAdapter abstracts how a phase is executed, so local (direct
-// `opencode run`) and Piave (systemd/Podman) differ only in the launcher.
-type OpenCodeAdapter interface {
+// Runtime is the execution contract. OpenCode is the current implementation;
+// the interface is deliberately runtime-agnostic so other runtimes can be added
+// later without changing the orchestrator.
+type Runtime interface {
+	// Name identifies the runtime (e.g. "opencode").
+	Name() string
+	// Available performs a safe availability/capability check. A non-nil error
+	// (wrapping ErrRuntimeUnavailable) means the runtime cannot be used.
+	Available(ctx context.Context) (CLICapabilities, error)
+	// Run executes one phase. A non-zero process exit is evidence in
+	// RunResult.ExitCode (execution/task failure), not an error. An error means
+	// the process could not be started at all (wrapping ErrProcessStart).
 	Run(ctx context.Context, req RunRequest) (*RunResult, error)
-	ValidateCLI(ctx context.Context) (CLICapabilities, error)
 }
+
+// OpenCodeAdapter is retained as an alias for the runtime contract.
+type OpenCodeAdapter = Runtime

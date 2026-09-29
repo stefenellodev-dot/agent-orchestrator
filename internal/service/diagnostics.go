@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -75,21 +76,26 @@ func (o *Orchestrator) Diagnostics(ctx context.Context) DiagnosticsReport {
 		})
 	}
 
-	// 2. OpenCode worker availability (capability probe, bounded).
+	// 2. Runtime (OpenCode) availability (capability probe, bounded).
 	if o.adapter == nil {
 		add(Finding{Check: "worker", Status: StatusFail, Severity: SeverityError,
-			Finding: "OpenCode adapter not configured"})
+			Finding: "runtime adapter not configured"})
 	} else {
 		pctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-		caps, werr := o.adapter.ValidateCLI(pctx)
+		caps, werr := o.adapter.Available(pctx)
 		cancel()
 		if werr != nil {
-			add(Finding{Check: "worker", Status: StatusFail, Severity: SeverityError,
-				Finding: "OpenCode worker unavailable", Cause: werr.Error(),
-				Recommendation: "check the OpenCode binary/mount in the worker"})
+			severity := SeverityError
+			rec := "check the runtime binary/mount in the worker"
+			if errors.Is(werr, domain.ErrRuntimeUnavailable) {
+				rec = "runtime unavailable: check the OpenCode binary/mount in the worker"
+			}
+			add(Finding{Check: "worker", Status: StatusFail, Severity: severity,
+				Finding: fmt.Sprintf("%s runtime unavailable", o.adapter.Name()), Cause: werr.Error(),
+				Recommendation: rec})
 		} else {
 			add(Finding{Check: "worker", Status: StatusOK, Severity: SeverityInfo,
-				Finding: fmt.Sprintf("OpenCode available (version %s)", caps.Version)})
+				Finding: fmt.Sprintf("%s runtime available (version %s)", o.adapter.Name(), caps.Version)})
 		}
 	}
 

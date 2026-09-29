@@ -180,9 +180,16 @@ func (o *Orchestrator) executePhase(ctx context.Context, wi *domain.WorkItem) (*
 		TypecheckResults: res.TypecheckResults,
 		Artifacts:        res.Artifacts,
 	}
-	if res.ExitCode == 0 {
+	switch {
+	case res.TimedOut:
+		sess.Status = domain.SessionFailed
+		sess.Error = "runtime timeout"
+	case res.Canceled:
+		sess.Status = domain.SessionFailed
+		sess.Error = "runtime canceled"
+	case res.ExitCode == 0:
 		sess.Status = domain.SessionCompleted
-	} else {
+	default:
 		sess.Status = domain.SessionFailed
 		sess.Error = strings.TrimSpace(res.Stderr)
 	}

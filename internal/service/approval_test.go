@@ -19,7 +19,9 @@ type fakeAdapter struct {
 	err    error
 }
 
-func (f *fakeAdapter) ValidateCLI(context.Context) (domain.CLICapabilities, error) {
+func (f *fakeAdapter) Name() string { return "fake" }
+
+func (f *fakeAdapter) Available(context.Context) (domain.CLICapabilities, error) {
 	return domain.CLICapabilities{Version: "test"}, nil
 }
 

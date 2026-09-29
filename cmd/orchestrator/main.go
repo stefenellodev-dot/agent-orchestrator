@@ -88,7 +88,7 @@ func runServe(cfg *config.Config) error {
 	fmt.Fprintf(os.Stderr, "orchestrator starting: %s\n", id.String())
 
 	adapter := service.NewCLIAdapter(cfg.OpenCode.BinaryPath)
-	if caps, err := adapter.ValidateCLI(context.Background()); err != nil {
+	if caps, err := adapter.Available(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: opencode CLI probe failed: %v\n", err)
 	} else {
 		id.OpenCode = caps.Version
@@ -254,7 +254,7 @@ func opencodeRunCmd() *cobra.Command {
 			}
 
 			adapter := service.NewCLIAdapter(cfg.OpenCode.BinaryPath)
-			if _, err := adapter.ValidateCLI(cmd.Context()); err != nil {
+			if _, err := adapter.Available(cmd.Context()); err != nil {
 				return err
 			}
 			res, err := adapter.Run(cmd.Context(), domain.RunRequest{

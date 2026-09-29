@@ -49,7 +49,7 @@ func TestValidateCLI_AgainstFakeBinary(t *testing.T) {
 	withFakeOpenCode(t)
 	adapter := service.NewCLIAdapter("opencode")
 
-	caps, err := adapter.ValidateCLI(context.Background())
+	caps, err := adapter.Available(context.Background())
 	require.NoError(t, err)
 
 	assert.Equal(t, "1.18.31", caps.Version)

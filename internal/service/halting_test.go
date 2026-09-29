@@ -15,7 +15,9 @@ import (
 // scriptedAdapter returns a per-phase exit code.
 type scriptedAdapter struct{ exitByPhase map[domain.Phase]int }
 
-func (s *scriptedAdapter) ValidateCLI(context.Context) (domain.CLICapabilities, error) {
+func (s *scriptedAdapter) Name() string { return "scripted" }
+
+func (s *scriptedAdapter) Available(context.Context) (domain.CLICapabilities, error) {
 	return domain.CLICapabilities{Version: "test"}, nil
 }
 

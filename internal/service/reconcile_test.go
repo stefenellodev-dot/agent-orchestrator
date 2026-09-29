@@ -270,7 +270,9 @@ type blockingAdapter struct {
 	calls   int
 }
 
-func (b *blockingAdapter) ValidateCLI(context.Context) (domain.CLICapabilities, error) {
+func (b *blockingAdapter) Name() string { return "blocking" }
+
+func (b *blockingAdapter) Available(context.Context) (domain.CLICapabilities, error) {
 	return domain.CLICapabilities{Version: "test"}, nil
 }
 

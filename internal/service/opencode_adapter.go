@@ -9,13 +9,14 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/stefenello/agent-orchestrator/internal/domain"
 )
 
 // CLIAdapter executes OpenCode phases by invoking the local `opencode` binary.
-// It only uses flags confirmed by ValidateCLI; unverified capabilities are
+// It only uses flags confirmed by Available; unverified capabilities are
 // treated as absent. Piave swaps only the process launcher, not this contract.
 type CLIAdapter struct {
 	binary  string
@@ -31,21 +32,25 @@ func NewCLIAdapter(binary string) *CLIAdapter {
 	return &CLIAdapter{binary: binary, timeout: 10 * time.Minute}
 }
 
-var _ domain.OpenCodeAdapter = (*CLIAdapter)(nil)
+var _ domain.Runtime = (*CLIAdapter)(nil)
+
+// Name identifies the runtime.
+func (a *CLIAdapter) Name() string { return "opencode" }
 
 // Capabilities returns the last probed capabilities (zero value if never probed).
 func (a *CLIAdapter) Capabilities() domain.CLICapabilities { return a.caps }
 
-// ValidateCLI probes the installed CLI. It requires only that `--version`
+// Available probes the installed CLI. It requires only that `--version`
 // works; everything else is discovered and marked absent when unavailable.
-func (a *CLIAdapter) ValidateCLI(ctx context.Context) (domain.CLICapabilities, error) {
+// A failure wraps ErrRuntimeUnavailable.
+func (a *CLIAdapter) Available(ctx context.Context) (domain.CLICapabilities, error) {
 	version, verErr := a.output(ctx, "--version")
 	runHelp, _ := a.output(ctx, "run", "--help")
 	agents, _ := a.output(ctx, "agent", "list")
 
 	caps := ParseCapabilities(version, runHelp, agents)
 	if verErr != nil {
-		return caps, fmt.Errorf("opencode CLI not available: %w", verErr)
+		return caps, fmt.Errorf("%w: %v", domain.ErrRuntimeUnavailable, verErr)
 	}
 	a.caps = caps
 	a.probed = true
@@ -60,7 +65,7 @@ func (a *CLIAdapter) Run(ctx context.Context, req domain.RunRequest) (*domain.Ru
 		return nil, errors.New("worktree path is required")
 	}
 	if !a.probed {
-		if _, err := a.ValidateCLI(ctx); err != nil {
+		if _, err := a.Available(ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -77,6 +82,16 @@ func (a *CLIAdapter) Run(ctx context.Context, req domain.RunRequest) (*domain.Ru
 	cmd := exec.CommandContext(runCtx, a.binary, a.buildArgs(req)...)
 	cmd.Dir = req.WorktreePath
 	cmd.Env = append(os.Environ(), mapToEnv(req.EnvVars)...)
+	// Kill the whole process group on timeout/cancellation so no child process
+	// (e.g. an opencode subprocess) is left orphaned.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
+		}
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+	cmd.WaitDelay = 5 * time.Second
 
 	if os.Getenv("ORCHESTRATOR_DEBUG") != "" {
 		fmt.Fprintf(os.Stderr, "opencode exec: %s %q (dir=%s)\n", a.binary, cmd.Args[1:], cmd.Dir)
@@ -92,7 +107,8 @@ func (a *CLIAdapter) Run(ctx context.Context, req domain.RunRequest) (*domain.Ru
 		if errors.As(err, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		} else {
-			return nil, fmt.Errorf("execute opencode: %w", err)
+			// The process could not be started (e.g. binary missing/not executable).
+			return nil, fmt.Errorf("%w: %v", domain.ErrProcessStart, err)
 		}
 	}
 
@@ -108,6 +124,8 @@ func (a *CLIAdapter) Run(ctx context.Context, req domain.RunRequest) (*domain.Ru
 		Stdout:        stdout.String(),
 		Stderr:        stderr.String(),
 		AgentText:     extractAgentText(stdout.String()),
+		TimedOut:      errors.Is(runCtx.Err(), context.DeadlineExceeded),
+		Canceled:      errors.Is(runCtx.Err(), context.Canceled),
 		BaseCommitSHA: base,
 		CommitSHA:     postHead,
 	}

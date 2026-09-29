@@ -25,7 +25,9 @@ func (f failingStore) ListWorkItems(context.Context, string) ([]*domain.WorkItem
 // failingAdapter simulates an unavailable OpenCode worker.
 type failingAdapter struct{}
 
-func (failingAdapter) ValidateCLI(context.Context) (domain.CLICapabilities, error) {
+func (failingAdapter) Name() string { return "opencode" }
+
+func (failingAdapter) Available(context.Context) (domain.CLICapabilities, error) {
 	return domain.CLICapabilities{}, errors.New("worker down")
 }
 func (failingAdapter) Run(context.Context, domain.RunRequest) (*domain.RunResult, error) {

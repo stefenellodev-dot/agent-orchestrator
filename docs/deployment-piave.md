@@ -17,6 +17,19 @@ no broker, no scp/rsync from a developer machine.
   └────────────────────────────────────────────────────────────────────┘
 ```
 
+## Access
+
+The API/dashboard is published on two interfaces:
+- `127.0.0.1:18080` on Piave — deploy health check and SSH tunnels.
+- `100.126.211.117:18080` (the `piave` node's Tailscale IP) — tailnet only;
+  the home LAN is not exposed.
+
+From any device on the tailnet: `http://100.126.211.117:18080/` (basic auth).
+Because the bind depends on the `tailscale0` address, the unit has
+`RestartSec=5` and self-heals once Tailscale is up. If the node's tailnet IP
+changes, update `PublishPort` in
+`configs/quadlet/agent-orchestrator.container` and redeploy.
+
 ## Piave layout
 
 ```

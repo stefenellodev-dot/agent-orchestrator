@@ -15,12 +15,16 @@ Volume=%h/.opencode:/opt/opencode:ro
 # Pinned Go 1.27.1 toolchain for objective self-validation (read-only).
 Volume=%h/go-toolchain:/opt/go-toolchain:ro
 EnvironmentFile=%h/.config/agent-orchestrator/secrets.env
-# Dashboard/API bound to loopback only.
+# Loopback (deploy health check + local tunnel) and Tailscale-only access.
+# 100.126.211.117 is the piave node's stable tailnet IP. The LAN is not exposed.
 PublishPort=127.0.0.1:18080:8080
+PublishPort=100.126.211.117:18080:8080
 Exec=serve --config /etc/agent-orchestrator/orchestrator.yaml
 
 [Service]
 Restart=always
+# Retry politely if the tailscale0 address is not yet assigned at boot.
+RestartSec=5
 TimeoutStartSec=180
 
 [Install]
